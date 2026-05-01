@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { playSfx } from './audio/AudioManager'
 import heroi_parado from './ARTES/HEROI/heroi_parado.png'
 import bau_fechado  from './ARTES/ITEM/bau.png'
 import bau_abrindo  from './ARTES/ITEM/bau_abrindo.png'
@@ -31,7 +32,7 @@ export default function ItemStage({ player, phase, onCollect }) {
   const [showPopup,  setShowPopup]  = useState(false)
 
   useEffect(() => {
-    const t1 = setTimeout(() => setFrame('opening'), 800)
+    const t1 = setTimeout(() => { setFrame('opening'); playSfx('chest_open') }, 800)
     const t2 = setTimeout(() => setFrame('open'),    1600)
     const t3 = setTimeout(() => setShowPopup(true),  2200)
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3) }

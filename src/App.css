@@ -270,3 +270,31 @@
 }
 
 .screen-icon { width: clamp(160px, 30vw, 400px); height: auto; image-rendering: pixelated; margin-bottom: 8px; }
+
+/* ══ AUDIO SETTINGS ══ */
+.audio-settings {
+  display: flex; flex-direction: column; gap: 10px;
+  background: rgba(0,0,0,0.55); border: 2px solid #8b6914;
+  padding: 12px 20px; width: 100%; max-width: 360px;
+}
+.audio-settings-title {
+  font-size: 0.42rem; color: #f5c842; letter-spacing: 2px; text-align: center;
+}
+.audio-row {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.35rem; color: #c8e0f0;
+}
+.audio-row span:first-child { min-width: 52px; }
+.audio-row span:last-child  { min-width: 24px; text-align: right; color: #f5c842; }
+.audio-row input[type=range] {
+  flex: 1; accent-color: #f5c842; cursor: pointer; height: 4px;
+}
+.mute-btn {
+  align-self: center;
+  background: #2c1810; border: 2px solid #f5c842;
+  color: #f5c842; font-family: 'Press Start 2P', monospace;
+  font-size: 0.38rem; padding: 6px 16px; cursor: pointer;
+  transition: background 0.1s;
+}
+.mute-btn:hover  { background: #4a2a18; }
+.mute-btn.muted  { border-color: #c0392b; color: #c0392b; }

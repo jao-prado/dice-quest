@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import { unlockAudio, playSfx, playBgm, fadeToBgm, stopBgm } from './audio/AudioManager'
+import AudioSettings from './AudioSettings'
 import campoBatalha from './assets/cenario.png'
 import heroi_parado  from './ARTES/HEROI/heroi_parado.png'
 import heroi_ataque1 from './ARTES/HEROI/heroi_comecando_atacar.png'
@@ -98,6 +100,17 @@ export default function App() {
   const [enemyHit,    setEnemyHit]    = useState(false)
   const [showInventory, setShowInventory] = useState(false)
 
+  // BGM automático por estado
+  useEffect(() => {
+    if (gameState === 'combat') {
+      if (enemy?.type === 'boss') fadeToBgm('boss')
+      else fadeToBgm('overworld')
+    } else if (gameState === 'gameover') {
+      stopBgm()
+      playSfx('gameover')
+    }
+  }, [gameState, enemy?.type])
+
   const playHeroAttack = (cb) => {
     setHeroAnim('atk1')
     setTimeout(() => { setHeroAnim('atk2'); setTimeout(() => { setHeroAnim('idle'); cb() }, 200) }, 200)
@@ -111,6 +124,7 @@ export default function App() {
   const isItemPhase = (phase) => phase % 3 === 0 && phase % 5 !== 0
 
   const startPhase = (p = player) => {
+    playSfx('click')
     if (isItemPhase(p.phase)) { setGameState('item'); return }
     const e = getEnemy(p.phase)
     setEnemy({ ...e, maxHp: e.hp })
@@ -121,6 +135,7 @@ export default function App() {
   }
 
   const handleCollect = (loot) => {
+    playSfx('item_collect')
     setPlayer(p => ({ ...p, inventory: [...p.inventory, loot.id], phase: p.phase + 1 }))
     setGameState('menu')
   }
@@ -128,6 +143,7 @@ export default function App() {
   const handleAttack = () => {
     if (rolling) return
     setRolling(true)
+    playSfx('dice_roll')
     const roll = rollD8()
     setDiceResult(roll)
     setShowDice(true)
@@ -137,6 +153,7 @@ export default function App() {
   const handleDefend = () => {
     if (rolling) return
     setRolling(true)
+    playSfx('dice_roll')
     const roll = rollD8()
     setDiceResult(roll)
     setShowDice(true)
@@ -156,10 +173,12 @@ export default function App() {
     const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(stats.baseDmg * mult))
     const newEnemyHp = Math.max(0, enemy.hp - dmg)
 
+    const sfxHit = mult >= 2 ? 'attack_critical' : mult >= 1.5 ? 'attack_strong' : 'attack'
     playHeroAttack(() => {
       setEnemy(e => ({ ...e, hp: newEnemyHp }))
       setEnemyHit(true)
       setEnemyDmgPop(dmg)
+      playSfx(sfxHit, mult >= 2 ? 0.45 : 1)
       setTimeout(() => setEnemyHit(false), 400)
 
       if (newEnemyHp <= 0) {
@@ -177,6 +196,8 @@ export default function App() {
 
   const resolveDefend = (roll) => {
     playEnemyAttack(() => {
+      const blocked = roll >= 5
+      if (blocked) playSfx('defend')
       doEnemyDamage(true, roll)
       setTimeout(() => setRolling(false), 1500)
     })
@@ -190,6 +211,7 @@ export default function App() {
     let dmg = Math.max(1, Math.round(enemy.dmg * eMult))
     if (isDefending) dmg = defRoll >= 5 ? 0 : Math.max(0, dmg - Math.floor(defRoll / 2))
     dmg = Math.max(0, dmg - (stats.defense || 0))
+    playSfx('hit')
     setHeroDmgPop(dmg)
     setPlayer(p => {
       const newHp = p.hp - dmg
@@ -201,6 +223,7 @@ export default function App() {
   const handleUseItem = (id) => {
     const data = ITEM_DATA[id]
     if (!data) return
+    playSfx('drink_potion')
     setPlayer(p => {
       const inv = [...p.inventory]
       const idx = inv.indexOf(id)
@@ -213,6 +236,7 @@ export default function App() {
 
   const handleReroll = () => {
     if (player.rerollUsed || !player.perks.luck) return
+    playSfx('dice_roll')
     const roll = rollD8()
     setDiceResult(roll)
     setPlayer(p => ({ ...p, rerollUsed: true }))
@@ -224,6 +248,8 @@ export default function App() {
       const newXp = p.xp + xpGain
       const needed = XP_TO_LEVEL(p.level)
       if (newXp >= needed) {
+        playSfx('levelup', 0.3)
+        playSfx('levelup_complete', 0.3)
         setPerkChoices(pickPerks())
         setTimeout(() => setGameState('levelup'), 400)
         return { ...p, xp: newXp - needed, level: p.level + 1, phase: p.phase + 1, rerollUsed: false }
@@ -234,6 +260,7 @@ export default function App() {
   }
 
   const choosePerk = (perk) => {
+    playSfx('click')
     setPlayer(p => {
       const current = p.perks[perk.id] || 0
       const updated = { ...p, perks: { ...p.perks, [perk.id]: current + 1 } }
@@ -249,6 +276,7 @@ export default function App() {
   }
 
   const restart = () => {
+    playSfx('click')
     setPlayer(initialPlayer)
     setGameState('title')
     setDiceResult(null)
@@ -270,7 +298,7 @@ export default function App() {
               <img src={IC.titulo} alt="logo" className="title-logo-img" />
               <p className="title-sub">Roguelite de Dados</p>
             </div>
-            <button className="img-btn title-btn" onClick={() => setGameState('menu')}>
+            <button className="img-btn title-btn" onClick={() => { unlockAudio(); fadeToBgm('overworld'); playSfx('click'); playSfx('start_run'); setGameState('menu') }}>
               <img src={IC.comecar_jogo} alt="Jogar" />
             </button>
             <p className="title-hint">Sobreviva o maximo que puder</p>
@@ -335,6 +363,8 @@ export default function App() {
               ? <img src={IC.enfrentar_boss} alt="Enfrentar Boss" />
               : <img src={IC.proximo_enc}    alt="Proximo Encontro" />}
           </button>
+
+          <AudioSettings />
         </div>
       )}
 
@@ -390,7 +420,7 @@ export default function App() {
               <button className="img-btn" onClick={handleDefend} disabled={rolling}>
                 <img src={IC.peark_defesa} alt="Defend" />
               </button>
-              <button className="img-btn" onClick={() => setShowInventory(true)} disabled={rolling}>
+              <button className="img-btn" onClick={() => { playSfx('click'); setShowInventory(true) }} disabled={rolling}>
                 <img src={IC.mochila} alt="Mochila" />
               </button>
               {player.perks.luck && !player.rerollUsed && (
@@ -404,7 +434,7 @@ export default function App() {
               <InventoryMenu
                 inventory={player.inventory}
                 onUse={handleUseItem}
-                onClose={() => setShowInventory(false)}
+                onClose={() => { playSfx('click'); setShowInventory(false) }}
               />
             )}
           </div>
@@ -445,6 +475,7 @@ export default function App() {
           <button className="img-btn" onClick={restart}>
             <img src={IC.proximo_enc} alt="Recomecar" />
           </button>
+          <AudioSettings />
         </div>
       )}
     </div>
