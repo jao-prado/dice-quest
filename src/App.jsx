@@ -77,11 +77,16 @@ function HeroSprite({ anim }) {
   return <img src={src} alt="hero" className="sprite hero-sprite" />
 }
 
-function EnemySprite({ anim, isBoss }) {
+function EnemySprite({ anim, isBoss, dying, onDyingDone }) {
   const src = anim === 'atk' ? monstro_ataque : monstro_parado
-  const cls = `sprite enemy-sprite${isBoss ? ' boss-sprite' : ''}`
+  const cls = `sprite enemy-sprite${isBoss ? ' boss-sprite' : ''}${dying ? ' enemy-dying' : ''}`
   const style = isBoss ? { filter: 'hue-rotate(270deg) saturate(2) brightness(0.85)' } : {}
-  return <img src={src} alt="enemy" className={cls} style={style} />
+  return (
+    <img
+      src={src} alt="enemy" className={cls} style={style}
+      onAnimationEnd={dying ? onDyingDone : undefined}
+    />
+  )
 }
 
 export default function App() {
@@ -98,7 +103,10 @@ export default function App() {
   const [enemyDmgPop, setEnemyDmgPop] = useState(null)
   const [heroDmgPop,  setHeroDmgPop]  = useState(null)
   const [enemyHit,    setEnemyHit]    = useState(false)
+  const [heroHit,     setHeroHit]     = useState(false)
   const [showInventory, setShowInventory] = useState(false)
+  // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
+  const [combatPhase, setCombatPhase] = useState('idle')
 
   // BGM automático por estado
   useEffect(() => {
@@ -131,6 +139,7 @@ export default function App() {
     setDiceResult(null)
     setHeroAnim('idle')
     setEnemyAnim('idle')
+    setCombatPhase('idle')
     setGameState('combat')
   }
 
@@ -178,11 +187,12 @@ export default function App() {
       setEnemy(e => ({ ...e, hp: newEnemyHp }))
       setEnemyHit(true)
       setEnemyDmgPop(dmg)
-      playSfx(sfxHit, mult >= 2 ? 0.45 : 1)
-      setTimeout(() => setEnemyHit(false), 400)
+      if (mult === 0) playSfx('defend')
+      else playSfx(sfxHit, mult >= 2 ? 0.25 : 1)
+      setTimeout(() => setEnemyHit(false), 500)
 
       if (newEnemyHp <= 0) {
-        setTimeout(() => { enemyDied(); setRolling(false) }, 1500)
+        setCombatPhase('hit') // popup onDone vai avançar para 'dying'
         return
       }
       setTimeout(() => {
@@ -197,7 +207,7 @@ export default function App() {
   const resolveDefend = (roll) => {
     playEnemyAttack(() => {
       const blocked = roll >= 5
-      if (blocked) playSfx('defend')
+      if (blocked) { playSfx('defend'); playSfx('hit', 0.15) }
       doEnemyDamage(true, roll)
       setTimeout(() => setRolling(false), 1500)
     })
@@ -213,9 +223,14 @@ export default function App() {
     dmg = Math.max(0, dmg - (stats.defense || 0))
     playSfx('hit')
     setHeroDmgPop(dmg)
+    setHeroHit(true)
+    setTimeout(() => setHeroHit(false), 500)
     setPlayer(p => {
       const newHp = p.hp - dmg
-      if (newHp <= 0) { setTimeout(() => setGameState('gameover'), 300); return { ...p, hp: 0 } }
+      if (newHp <= 0) {
+        setTimeout(() => setGameState('gameover'), 1800)
+        return { ...p, hp: 0 }
+      }
       return { ...p, hp: newHp }
     })
   }
@@ -251,10 +266,10 @@ export default function App() {
         playSfx('levelup', 0.3)
         playSfx('levelup_complete', 0.3)
         setPerkChoices(pickPerks())
-        setTimeout(() => setGameState('levelup'), 400)
+        setTimeout(() => setGameState('levelup'), 100)
         return { ...p, xp: newXp - needed, level: p.level + 1, phase: p.phase + 1, rerollUsed: false }
       }
-      setTimeout(() => setGameState('menu'), 400)
+      setTimeout(() => setGameState('menu'), 100)
       return { ...p, xp: newXp, phase: p.phase + 1, rerollUsed: false }
     })
   }
@@ -381,14 +396,26 @@ export default function App() {
               </div>
             </div>
 
-            <div className="scene-hero"><HeroSprite anim={heroAnim} /></div>
+            <div className={`scene-hero${heroHit ? ' hero-hit' : ''}`}>
+              <HeroSprite anim={heroAnim} />
+            </div>
 
             <div className={`scene-enemy${enemyHit ? ' hit' : ''}`}>
               {enemyDmgPop !== null && (
-                <DamagePopup damage={enemyDmgPop} type="enemy" onDone={() => setEnemyDmgPop(null)} />
+                <DamagePopup damage={enemyDmgPop} type="enemy" onDone={() => {
+                  setEnemyDmgPop(null)
+                  if (combatPhase === 'hit') setCombatPhase('dying')
+                }} />
               )}
-              <EnemySprite anim={enemyAnim} isBoss={enemy.type === 'boss'} />
+              {combatPhase === 'dead'
+                ? null
+                : <EnemySprite anim={enemyAnim} isBoss={enemy.type === 'boss'}
+                    dying={combatPhase === 'dying'}
+                    onDyingDone={() => { setCombatPhase('dead'); enemyDied(); setRolling(false) }}
+                  />
+              }
             </div>
+
 
             <div className="player-hud">
               <div className="hud-name">HERO <span>Lv.{player.level}</span></div>
@@ -412,6 +439,10 @@ export default function App() {
             {showDice && pendingDice && (
               <DiceRollAnimation result={pendingDice.roll} onDone={onDiceAnimDone} />
             )}
+
+            <button className="img-btn" style={{ position: 'absolute', top: 12, right: 0, zIndex: 6, padding: 0, transform: 'translateY(-30%)' }} disabled={rolling} onClick={() => { playSfx('click'); setRolling(false); setShowDice(false); setPendingDice(null); setGameState('menu') }}>
+              <img src={IC.engrenagem} alt="Menu" style={{ height:200, imageRendering: 'auto' }} />
+            </button>
 
             <div className="action-bar">
               <button className="img-btn" onClick={handleAttack} disabled={rolling}>

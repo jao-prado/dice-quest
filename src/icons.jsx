@@ -15,6 +15,7 @@ import peark_sorte     from './ARTES/ICONS/peark_sorte.png'
 import peark_vida      from './ARTES/ICONS/peark_vida.png'
 import pocao           from './ARTES/ICONS/pocao.png'
 import proximo_enc     from './ARTES/ICONS/proximo_encontro.png'
+import engrenagem      from './ARTES/ICONS/engrenagem.png'
 import reroll          from './ARTES/ICONS/REROLL.png'
 import titulo          from './ARTES/ICONS/titulo.png'
 
@@ -23,7 +24,7 @@ export const IC = {
   enfrentar_boss, escudo, espada, estrela,
   game_over, level_up, mochila,
   peark_agilidade, peark_dano, peark_defesa, peark_sorte, peark_vida,
-  pocao, proximo_enc, reroll, titulo,
+  engrenagem, pocao, proximo_enc, reroll, titulo,
 }
 
 export function Icon({ name, size = 22, style = {} }) {

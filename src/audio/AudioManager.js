@@ -42,7 +42,7 @@ export function unlockAudio() {
 }
 
 export function playSfx(name, volumeScale = 1) {
-  if (!unlocked || muted) return
+  if (!unlocked) return
   const original = sfxPool[name]
   if (!original) return
   const clone = original.cloneNode()
