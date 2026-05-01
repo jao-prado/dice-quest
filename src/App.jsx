@@ -15,11 +15,11 @@ import { Icon, IC } from './icons'
 import InventoryMenu, { ITEM_DATA } from './InventoryMenu'
 
 const PERKS = [
-  { id: 'damage',  name: 'Dano',      icon: 'peark_dano',      desc: '+1 dano base' },
-  { id: 'defense', name: 'Defesa',    icon: 'peark_defesa',    desc: 'Reduz 1 dano recebido' },
-  { id: 'maxhp',   name: 'Vida',      icon: 'peark_vida',      desc: '+3 HP maximo' },
-  { id: 'luck',    name: 'Sorte',     icon: 'peark_sorte',     desc: 'Reroll 1x por combate' },
-  { id: 'agility', name: 'Agilidade', icon: 'peark_agilidade', desc: '20% chance de esquivar' },
+  { id: 'damage',  name: 'Dano',      icon: 'peark_dano',      desc: (lv) => `+${DMG_PER_LEVEL[Math.min(lv+1,5)]} dano` },
+  { id: 'defense', name: 'Defesa',    icon: 'peark_defesa',    desc: (lv) => `-${DEF_PER_LEVEL[Math.min(lv+1,5)]} dano recebido` },
+  { id: 'maxhp',   name: 'Vida',      icon: 'peark_vida',      desc: (lv) => `+${HP_PER_LEVEL[Math.min(lv+1,5)] - HP_PER_LEVEL[Math.min(lv,5)]} HP maximo` },
+  { id: 'luck',    name: 'Sorte',     icon: 'peark_sorte',     desc: (lv) => `+${Math.round(LUCK_PER_LEVEL[Math.min(lv+1,5)]*100)}% chance de rolar melhor` },
+  { id: 'agility', name: 'Agilidade', icon: 'peark_agilidade', desc: (lv) => `+${Math.round(AGIL_PER_LEVEL[Math.min(lv+1,5)]*100)}% chance de esquivar` },
 ]
 
 const ENEMIES = [
@@ -54,21 +54,31 @@ function getDiceEffect(roll) {
   return              { mult: 2 }
 }
 
-const rollD8 = () => Math.floor(Math.random() * 8) + 1
+const rollD8 = (luckLevel = 0) => {
+  const roll = Math.floor(Math.random() * 8) + 1
+  const luckChance = LUCK_PER_LEVEL[Math.min(luckLevel, 5)]
+  if (luckChance > 0 && Math.random() < luckChance) return Math.min(8, roll + 1)
+  return roll
+}
 
 const initialPlayer = {
   hp: 20, maxHp: 20, xp: 0, level: 1, phase: 1,
-  perks: {}, inventory: ['pocao', 'pocao'], rerollUsed: false,
+  perks: {}, inventory: ['pocao', 'pocao'],
   baseDmg: 20,
 }
+
+const HP_PER_LEVEL    = [0, 3, 6, 9, 13, 18]
+const DEF_PER_LEVEL   = [0, 1, 2, 4, 6, 9]
+const DMG_PER_LEVEL   = [0, 1, 2, 4, 6, 9]
+const LUCK_PER_LEVEL  = [0, 0.05, 0.10, 0.18, 0.28, 0.40]
+const AGIL_PER_LEVEL  = [0, 0.06, 0.12, 0.20, 0.30, 0.40]
 
 function applyPerks(base, perks) {
   return {
     ...base,
-    baseDmg: base.baseDmg + (perks.damage || 0),
-    defense: perks.defense || 0,
-    maxHp:   base.maxHp + (perks.maxhp || 0) * 3,
-    agility: perks.agility ? 0.2 : 0,
+    baseDmg: base.baseDmg + DMG_PER_LEVEL[Math.min(perks.damage || 0, 5)],
+    defense: DEF_PER_LEVEL[Math.min(perks.defense || 0, 5)],
+    agility: AGIL_PER_LEVEL[Math.min(perks.agility || 0, 5)],
   }
 }
 
@@ -105,6 +115,7 @@ export default function App() {
   const [enemyHit,    setEnemyHit]    = useState(false)
   const [heroHit,     setHeroHit]     = useState(false)
   const [showInventory, setShowInventory] = useState(false)
+  const [perkChosen, setPerkChosen] = useState(false)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
 
@@ -153,7 +164,7 @@ export default function App() {
     if (rolling) return
     setRolling(true)
     playSfx('dice_roll')
-    const roll = rollD8()
+    const roll = rollD8(player.perks.luck || 0)
     setDiceResult(roll)
     setShowDice(true)
     setPendingDice({ roll, action: 'attack' })
@@ -163,7 +174,7 @@ export default function App() {
     if (rolling) return
     setRolling(true)
     playSfx('dice_roll')
-    const roll = rollD8()
+    const roll = rollD8(player.perks.luck || 0)
     setDiceResult(roll)
     setShowDice(true)
     setPendingDice({ roll, action: 'defend' })
@@ -179,7 +190,10 @@ export default function App() {
   const resolveAttack = (roll) => {
     const { mult } = getDiceEffect(roll)
     const stats = applyPerks(player, player.perks)
-    const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(stats.baseDmg * mult))
+    const forcaBonus = player.tempDmg || 0
+    const baseDmgTotal = stats.baseDmg + forcaBonus
+    const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(baseDmgTotal * mult))
+    if (forcaBonus > 0) setPlayer(p => ({ ...p, tempDmg: 0 }))
     const newEnemyHp = Math.max(0, enemy.hp - dmg)
 
     const sfxHit = mult >= 2 ? 'attack_critical' : mult >= 1.5 ? 'attack_strong' : 'attack'
@@ -215,7 +229,14 @@ export default function App() {
 
   const doEnemyDamage = (isDefending, defRoll) => {
     const stats = applyPerks(player, player.perks)
-    if (stats.agility > 0 && Math.random() < stats.agility) { setHeroDmgPop(0); return }
+    if (stats.agility > 0 && Math.random() < stats.agility) { playSfx('defend'); setHeroDmgPop(0); return }
+    const tempDefense = player.tempDefense || 0
+    if (tempDefense > 0) {
+      setPlayer(p => ({ ...p, tempDefense: 0 }))
+      setHeroDmgPop(0)
+      playSfx('defend')
+      return
+    }
     const eRoll = rollD8()
     const { mult: eMult } = getDiceEffect(eRoll)
     let dmg = Math.max(1, Math.round(enemy.dmg * eMult))
@@ -249,14 +270,6 @@ export default function App() {
     setShowInventory(false)
   }
 
-  const handleReroll = () => {
-    if (player.rerollUsed || !player.perks.luck) return
-    playSfx('dice_roll')
-    const roll = rollD8()
-    setDiceResult(roll)
-    setPlayer(p => ({ ...p, rerollUsed: true }))
-  }
-
   const enemyDied = () => {
     const xpGain = enemy.xp
     setPlayer(p => {
@@ -266,20 +279,28 @@ export default function App() {
         playSfx('levelup', 0.3)
         playSfx('levelup_complete', 0.3)
         setPerkChoices(pickPerks())
+        setPerkChosen(false)
         setTimeout(() => setGameState('levelup'), 100)
-        return { ...p, xp: newXp - needed, level: p.level + 1, phase: p.phase + 1, rerollUsed: false }
+        return { ...p, xp: newXp - needed, level: p.level + 1, phase: p.phase + 1 }
       }
       setTimeout(() => setGameState('menu'), 100)
-      return { ...p, xp: newXp, phase: p.phase + 1, rerollUsed: false }
+      return { ...p, xp: newXp, phase: p.phase + 1 }
     })
   }
 
   const choosePerk = (perk) => {
+    if (perkChosen) return
+    setPerkChosen(true)
     playSfx('click')
     setPlayer(p => {
-      const current = p.perks[perk.id] || 0
-      const updated = { ...p, perks: { ...p.perks, [perk.id]: current + 1 } }
-      if (perk.id === 'maxhp') updated.hp = Math.min(updated.hp + 3, updated.maxHp + 3)
+      const current = Math.min(p.perks[perk.id] || 0, 4)
+      const nextLv = current + 1
+      const updated = { ...p, perks: { ...p.perks, [perk.id]: nextLv } }
+      if (perk.id === 'maxhp') {
+        const hpGain = HP_PER_LEVEL[nextLv] - HP_PER_LEVEL[current]
+        updated.maxHp = p.maxHp + hpGain
+        updated.hp = Math.min(p.hp + hpGain, updated.maxHp)
+      }
       setTimeout(() => setGameState('menu'), 100)
       return updated
     })
@@ -454,11 +475,7 @@ export default function App() {
               <button className="img-btn" onClick={() => { playSfx('click'); setShowInventory(true) }} disabled={rolling}>
                 <img src={IC.mochila} alt="Mochila" />
               </button>
-              {player.perks.luck && !player.rerollUsed && (
-                <button className="img-btn" onClick={handleReroll} disabled={rolling}>
-                  <img src={IC.peark_sorte} alt="Reroll" />
-                </button>
-              )}
+
             </div>
 
             {showInventory && (
@@ -485,13 +502,13 @@ export default function App() {
           <div className="perk-choices">
             {perkChoices.map(perk => (
               <div key={perk.id} className="perk-choice-wrap">
-                <button className="img-btn perk-btn" onClick={() => choosePerk(perk)}>
+                <button className="img-btn perk-btn" onClick={() => choosePerk(perk)} disabled={perkChosen}>
                   <img src={IC[perk.icon]} alt={perk.name} />
                   {player.perks[perk.id] && (
                     <span className="perk-level-badge">Lv.{player.perks[perk.id]}</span>
                   )}
                 </button>
-                <p className="perk-desc">{perk.desc}</p>
+                <p className="perk-desc">{perk.desc(player.perks[perk.id] || 0)}</p>
               </div>
             ))}
           </div>

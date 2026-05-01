@@ -15,8 +15,8 @@ import pocao_forca  from './ARTES/ITEM/pocao_forca.png'
 export const LOOT_TABLE = [
   { id: 'poção',        name: 'POÇÃO DE VIDA',   desc: 'Restaura 5 HP',          sprite: pocao_vida   },
   { id: 'poção cura',   name: 'POÇÃO DE CURA',   desc: 'Restaura 10 HP',         sprite: pocao_cura   },
-  { id: 'poção defesa', name: 'POÇÃO DE DEFESA', desc: '+1 defesa no próx. turno', sprite: pocao_defesa },
-  { id: 'poção força',  name: 'POÇÃO DE FORÇA',  desc: '+2 dano no próx. turno',  sprite: pocao_forca  },
+  { id: 'poção defesa', name: 'POÇÃO DE DEFESA', desc: 'Bloqueia o próx. ataque recebido', sprite: pocao_defesa },
+  { id: 'poção força',  name: 'POÇÃO DE FORÇA',  desc: '+50% dano no próx. ataque',      sprite: pocao_forca  },
 ]
 
 export function rollLoot(phase) {

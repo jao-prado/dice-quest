@@ -10,10 +10,10 @@ export const ITEM_DATA = {
   'poção':         { name: 'Pocao de Vida',   sprite: pocao_vida,   effect: (p) => ({ ...p, hp: Math.min(p.maxHp, p.hp + 5)  }) },
   'poção cura':    { name: 'Pocao de Cura',   sprite: pocao_cura,   effect: (p) => ({ ...p, hp: Math.min(p.maxHp, p.hp + 10) }) },
   'pocao cura':    { name: 'Pocao de Cura',   sprite: pocao_cura,   effect: (p) => ({ ...p, hp: Math.min(p.maxHp, p.hp + 10) }) },
-  'poção defesa':  { name: 'Pocao de Defesa', sprite: pocao_defesa, effect: (p) => ({ ...p, tempDefense: (p.tempDefense||0)+2 }) },
-  'pocao defesa':  { name: 'Pocao de Defesa', sprite: pocao_defesa, effect: (p) => ({ ...p, tempDefense: (p.tempDefense||0)+2 }) },
-  'poção força':   { name: 'Pocao de Forca',  sprite: pocao_forca,  effect: (p) => ({ ...p, tempDmg: (p.tempDmg||0)+3 }) },
-  'pocao forca':   { name: 'Pocao de Forca',  sprite: pocao_forca,  effect: (p) => ({ ...p, tempDmg: (p.tempDmg||0)+3 }) },
+  'poção defesa':  { name: 'Pocao de Defesa', sprite: pocao_defesa, effect: (p) => ({ ...p, tempDefense: 1 }) },
+  'pocao defesa':  { name: 'Pocao de Defesa', sprite: pocao_defesa, effect: (p) => ({ ...p, tempDefense: 1 }) },
+  'poção força':   { name: 'Pocao de Forca',  sprite: pocao_forca,  effect: (p) => ({ ...p, tempDmg: Math.round(p.baseDmg * 0.5) }) },
+  'pocao forca':   { name: 'Pocao de Forca',  sprite: pocao_forca,  effect: (p) => ({ ...p, tempDmg: Math.round(p.baseDmg * 0.5) }) },
 }
 
 export default function InventoryMenu({ inventory, onUse, onClose }) {
