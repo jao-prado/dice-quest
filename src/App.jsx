@@ -16,126 +16,13 @@ import { Icon, IC } from './icons'
 import InventoryMenu, { ITEM_DATA } from './InventoryMenu'
 import { useCombatQueue } from './useCombatQueue'
 import { useHeroDamagePopups } from './useHeroDamagePopups'
+import { INITIAL_PLAYER, HP_PER_LEVEL, DEF_PER_LEVEL, DMG_PER_LEVEL, LUCK_PER_LEVEL, AGIL_PER_LEVEL, XP_TO_LEVEL, DEFEND_FAIL_MULT } from './game/constants'
+import { rollD8, getDiceEffect, applyPerks, calculatePlayerAttackDamage, calculateCounterDamage, calculateEnemyAttackDamage, applyMaxHpPerk } from './game/combatLogic'
+import { spawnEnemyWave } from './game/enemySystem'
+import { PERKS, pickPerks } from './game/perkSystem'
+import { logCombatEvent, logDamage, logPerkTrigger } from './game/debugLog'
 
-const PERKS = [
-  { id: 'damage',  name: 'Dano',      icon: 'peark_dano',      desc: (lv) => `+${DMG_PER_LEVEL[Math.min(lv+1,5)]} dano` },
-  { id: 'defense', name: 'Defesa',    icon: 'peark_defesa',    desc: (lv) => `-${DEF_PER_LEVEL[Math.min(lv+1,5)]} dano recebido` },
-  { id: 'maxhp',   name: 'Vida',      icon: 'peark_vida',      desc: (lv) => `+${HP_PER_LEVEL[Math.min(lv+1,5)] - HP_PER_LEVEL[Math.min(lv,5)]} HP maximo` },
-  { id: 'luck',    name: 'Sorte',     icon: 'peark_sorte',     desc: (lv) => `+${Math.round(LUCK_PER_LEVEL[Math.min(lv+1,5)]*100)}% chance de rolar melhor` },
-  { id: 'agility', name: 'Agilidade', icon: 'peark_agilidade', desc: (lv) => `+${Math.round(AGIL_PER_LEVEL[Math.min(lv+1,5)]*100)}% chance de esquivar` },
-]
 
-const NORMAL_NAMES = ['Goblin', 'Orc', 'Esqueleto', 'Zumbi', 'Lobo']
-const ELITE_NAMES  = ['Goblin Elite', 'Orc Bruto', 'Lich', 'Vampiro']
-const BOSS_NAMES   = { 10: 'Necromante', 20: 'Dragão das Sombras', 30: 'Rei Lich' }
-
-const XP_TO_LEVEL = (lvl) => 20 + lvl * 10
-
-function normalStats(phase) {
-  const hp  = 10 + phase * 2
-  const dmg = 2 + Math.floor(phase / 5)
-  const xp  = 6 + phase
-  return { hp, dmg, xp }
-}
-
-function buildEnemy(phase, type, id) {
-  const base = normalStats(phase)
-  if (type === 'boss') {
-    const hp  = Math.round(base.hp * 2.5)
-    const dmg = base.dmg + 2
-    const xp  = (6 + phase) * 4
-    const name = BOSS_NAMES[phase] ?? 'Boss'
-    return { name, hp, maxHp: hp, dmg, xp, type: 'boss', id }
-  }
-  if (type === 'elite') {
-    const hp  = Math.round(base.hp * 1.6)
-    const dmg = base.dmg + 1
-    const xp  = (6 + phase) * 2
-    const name = ELITE_NAMES[Math.floor(Math.random() * ELITE_NAMES.length)]
-    return { name, hp, maxHp: hp, dmg, xp, type: 'elite', id }
-  }
-  const name = NORMAL_NAMES[Math.floor(Math.random() * NORMAL_NAMES.length)]
-  return { name, hp: base.hp, maxHp: base.hp, dmg: base.dmg, xp: base.xp, type: 'normal', id }
-}
-
-function eliteChance(phase) {
-  if (phase >= 21) return 0.25
-  if (phase >= 16) return 0.20
-  if (phase >= 11) return 0.15
-  if (phase >= 6)  return 0.10
-  return 0
-}
-
-function getEnemyCount(phase) {
-  if (phase % 10 === 0) return 1 // boss
-  if (phase <= 10)  return 1
-  if (phase <= 17)  return Math.random() < 0.20 ? 1 : 2
-  if (phase <= 25)  return Math.random() < 0.30 ? 3 : 2
-  return Math.random() < 0.20 ? 2 : 3
-}
-
-function getEnemies(phase) {
-  if (phase % 10 === 0) return [buildEnemy(phase, 'boss', 0)]
-  const count = getEnemyCount(phase)
-  const chance = eliteChance(phase)
-  return Array.from({ length: count }, (_, i) => {
-    const type = Math.random() < chance ? 'elite' : 'normal'
-    return buildEnemy(phase, type, i)
-  })
-}
-
-// dano reduzido em grupo
-function groupDmgMult(count) {
-  if (count >= 4) return 0.50
-  if (count === 3) return 0.60
-  if (count === 2) return 0.75
-  return 1
-}
-
-function pickPerks() {
-  return [...PERKS].sort(() => Math.random() - 0.5).slice(0, 3)
-}
-
-function getDiceEffect(roll) {
-  if (roll === 1) return { mult: 0 }
-  if (roll <= 3)  return { mult: 0.75 }
-  if (roll <= 6)  return { mult: 1 }
-  if (roll === 7) return { mult: 1.5 }
-  return              { mult: 2 }
-}
-
-const rollD8 = (luckLevel = 0) => {
-  const roll = Math.floor(Math.random() * 8) + 1
-  const luckChance = LUCK_PER_LEVEL[Math.min(luckLevel, 5)]
-  if (luckChance > 0 && Math.random() < luckChance) return Math.min(8, roll + 1)
-  return roll
-}
-
-const initialPlayer = {
-  hp: 300000, maxHp: 3000, xp: 0, level: 1, phase: 1,
-  perks: {}, inventory: ['poção', 'poção'],
-  baseDmg: 200,
-}
-
-const HP_PER_LEVEL    = [0, 3, 6, 9, 13, 18]
-const DEF_PER_LEVEL   = [0, 1, 2, 4, 6, 9]
-const DMG_PER_LEVEL   = [0, 1, 2, 4, 6, 9]
-const LUCK_PER_LEVEL  = [0, 0.05, 0.10, 0.18, 0.28, 0.40]
-const AGIL_PER_LEVEL  = [0, 0.06, 0.12, 0.20, 0.30, 0.40]
-
-// dano base cresce +2 a cada 3 fases
-function playerBaseDmg(baseDmg, phase) {
-  return baseDmg + Math.floor((phase - 1) / 3) * 2
-}
-
-function applyPerks(base, perks, phase = 1) {
-  return {
-    ...base,
-    baseDmg: playerBaseDmg(base.baseDmg, phase) + DMG_PER_LEVEL[Math.min(perks.damage || 0, 5)],
-    defense: DEF_PER_LEVEL[Math.min(perks.defense || 0, 5)],
-    agility: AGIL_PER_LEVEL[Math.min(perks.agility || 0, 5)],
-  }
-}
 
 function HeroSprite({ anim }) {
   const src = anim === 'atk2' ? heroi_ataque2 : anim === 'atk1' ? heroi_ataque1 : heroi_parado
@@ -157,7 +44,7 @@ function EnemySprite({ anim, type, dying, dead, onDyingDone }) {
 }
 
 export default function App() {
-  const [player,      setPlayer]      = useState(initialPlayer)
+  const [player,      setPlayer]      = useState(INITIAL_PLAYER)
   const [gameState,   setGameState]   = useState('title')
   const [enemies,     setEnemies]     = useState([])
   const [diceResult,  setDiceResult]  = useState(null)
@@ -253,7 +140,7 @@ export default function App() {
 
   const startPhase = (p = player) => {
     if (isItemPhase(p.phase)) { setGameState('item'); return }
-    const es = getEnemies(p.phase)
+    const es = spawnEnemyWave(p.phase)
     setEnemies(es)
     setAllEnemies(es)
     setDyingIds([])
@@ -324,20 +211,15 @@ export default function App() {
   }
 
   const doHeroAttack = (roll, targetId, afterCb) => {
-    const { mult } = getDiceEffect(roll)
     const p = playerRef.current
-    const stats = applyPerks(p, p.perks, p.phase)
-    const forcaBonus = p.tempDmg || 0
-    const baseDmgTotal = stats.baseDmg + forcaBonus
-    const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(baseDmgTotal * mult))
-    if (forcaBonus > 0) setPlayer(prev => ({ ...prev, tempDmg: 0 }))
-    const sfxHit = mult >= 2 ? 'attack_critical' : mult >= 1.5 ? 'attack_strong' : 'attack'
+    const { dmg, sfx, mult } = calculatePlayerAttackDamage(p, roll)
+    if ((p.tempDmg || 0) > 0) setPlayer(prev => ({ ...prev, tempDmg: 0 }))
+    logCombatEvent('playerAttack', { roll, dmg, targetId })
     playHeroAttack(() => {
       setEnemies(prev => prev.map(e => e.id === targetId ? { ...e, hp: Math.max(0, e.hp - dmg) } : e))
       setEnemyHit(true)
       setEnemyDmgPop({ id: targetId, dmg })
-      if (mult === 0) playSfx('defend')
-      else playSfx(sfxHit, mult >= 2 ? 0.25 : 1)
+      playSfx(sfx, mult >= 2 ? 0.25 : 1)
       setTimeout(() => setEnemyHit(false), 500)
       const target = enemiesRef.current.find(e => e.id === targetId)
       if (target && Math.max(0, target.hp - dmg) <= 0) {
@@ -354,13 +236,16 @@ export default function App() {
     const events = enemyList.map(e => async () => {
       if (playerRef.current.hp <= 0) return
       await new Promise(resolve => playEnemyAttack(e.id, resolve))
-      const result = calcEnemyDamage(false, 0, 1, allowDodge, e)
+      const result = calculateEnemyAttackDamage(playerRef.current, enemiesRef.current, e, { allowDodge })
+      logCombatEvent('enemyAttack', { enemy: e.name, result })
       if (result.type === 'dodge') {
         playSfx('esquiva')
         spawnHeroDmgEvt('dodge')
         setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
         await waitForAnim()
       } else if (result.type === 'block') {
+        if ((playerRef.current.tempDefense || 0) > 0)
+          setPlayer(prev => ({ ...prev, tempDefense: 0 }))
         playSfx('defend')
         spawnHeroDmgEvt('block')
         setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
@@ -415,7 +300,6 @@ export default function App() {
     const alive = enemiesRef.current.filter(e => e.hp > 0)
     if (blocked) {
       const events = []
-      // Primeiro inimigo ataca e é bloqueado
       events.push(async () => {
         await new Promise(resolve => {
           playEnemyAttack(alive[0]?.id ?? 0, resolve)
@@ -425,12 +309,11 @@ export default function App() {
         setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
         await waitForAnim()
       })
-      // Se roll === 8, contra-ataque
       if (roll === 8) {
         events.push(async () => {
           const p = playerRef.current
-          const stats = applyPerks(p, p.perks, p.phase)
-          const counterDmg = Math.max(1, Math.round((stats.baseDmg + (p.tempDmg || 0)) * 0.2))
+          const counterDmg = calculateCounterDamage(p)
+          logCombatEvent('counterAttack', { counterDmg })
           const firstAlive = alive[0]
           if (firstAlive) {
             // 1. mostra "CONTRA-ATAQUE!" no inimigo antes do dano
@@ -451,7 +334,6 @@ export default function App() {
           }
         })
       }
-      // Inimigos restantes atacam sem allowDodge
       const remaining = alive.slice(1)
       if (remaining.length > 0) {
         events.push(...remaining.map(e => async () => {
@@ -459,7 +341,7 @@ export default function App() {
           await new Promise(resolve => {
             playEnemyAttack(e.id, resolve)
           })
-          const result = calcEnemyDamage(false, 0, 1, true, e) // remaining podem esquivar normalmente
+          const result = calculateEnemyAttackDamage(playerRef.current, enemiesRef.current, e, { allowDodge: true })
           if (result.type === 'dodge') {
             playSfx('esquiva')
             spawnHeroDmgEvt('dodge')
@@ -486,14 +368,14 @@ export default function App() {
       })
       enqueueAll(events)
     } else {
-      // Defesa falhou
-      const failMult = { 4: 1.10, 3: 1.15, 2: 1.23, 1: 1.35 }[roll] ?? 1
+      const failMult = DEFEND_FAIL_MULT[roll] ?? 1
       const events = []
       events.push(async () => {
         await new Promise(resolve => {
           playEnemyAttack(alive[0]?.id ?? 0, resolve)
         })
-        const result = calcEnemyDamage(false, 0, failMult, false, alive[0])
+        const result = calculateEnemyAttackDamage(playerRef.current, enemiesRef.current, alive[0], { failMult, allowDodge: false })
+        logCombatEvent('defendFail', { roll, failMult, result })
         if (result.type === 'hit') {
           playSfx('hit')
           spawnDmgPopup(result.dmg)
@@ -506,7 +388,7 @@ export default function App() {
           await new Promise(resolve => {
             playEnemyAttack(e.id, resolve)
           })
-          const result = calcEnemyDamage(false, 0, 1, true, e)
+          const result = calculateEnemyAttackDamage(playerRef.current, enemiesRef.current, e, { allowDodge: true })
           if (result.type === 'dodge') {
             playSfx('esquiva')
             spawnHeroDmgEvt('dodge')
@@ -532,31 +414,8 @@ export default function App() {
     }
   }
 
-  const calcEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true, attacker = null) => {
-    const currentEnemies = enemiesRef.current
-    const src = attacker ?? currentEnemies.find(e => e.hp > 0) ?? currentEnemies[0]
-    if (!src) return { type: 'none' }
-    const p = playerRef.current
-    const stats = applyPerks(p, p.perks, p.phase)
-    const aliveCount = currentEnemies.filter(e => e.hp > 0).length
-    const groupMult = groupDmgMult(aliveCount)
-    const dodged = allowDodge && stats.agility > 0 && Math.random() < stats.agility
-    if (dodged) return { type: 'dodge' }
-    const tempDefense = p.tempDefense || 0
-    if (tempDefense > 0) {
-      setPlayer(prev => ({ ...prev, tempDefense: 0 }))
-      return { type: 'block', dmg: 0 }
-    }
-    const eRoll = rollD8()
-    const { mult: eMult } = getDiceEffect(eRoll)
-    let dmg = Math.max(1, Math.round(src.dmg * eMult * failMult * groupMult))
-    if (isDefending) dmg = Math.max(0, dmg - Math.floor(defRoll / 2))
-    dmg = Math.max(0, dmg - (stats.defense || 0))
-    if (dmg === 0) return { type: 'block', dmg: 0 }
-    return { type: 'hit', dmg }
-  }
-
   const applyHeroDamage = (dmg) => {
+    logDamage(dmg, 'enemy→hero')
     setPlayer(p => {
       const newHp = p.hp - dmg
       if (newHp <= 0) {
@@ -627,15 +486,13 @@ export default function App() {
     if (perkChosen) return
     setPerkChosen(true)
     playSfx('click')
+    logPerkTrigger(perk.id, 'chosen')
     setPlayer(p => {
       const current = Math.min(p.perks[perk.id] || 0, 4)
       const nextLv = current + 1
-      const updated = { ...p, perks: { ...p.perks, [perk.id]: nextLv } }
-      if (perk.id === 'maxhp') {
-        const hpGain = HP_PER_LEVEL[nextLv] - HP_PER_LEVEL[current]
-        updated.maxHp = p.maxHp + hpGain
-        updated.hp = Math.min(p.hp + hpGain, updated.maxHp)
-      }
+      let updated = { ...p, perks: { ...p.perks, [perk.id]: nextLv } }
+      if (perk.id === 'maxhp') updated = applyMaxHpPerk(p, current, nextLv)
+      updated.perks = { ...p.perks, [perk.id]: nextLv }
       return updated
     })
     // avança para próximo perk da fila ou vai pro menu
@@ -651,7 +508,7 @@ export default function App() {
 
   const restart = () => {
     playSfx('click')
-    setPlayer(initialPlayer)
+    setPlayer(INITIAL_PLAYER)
     setGameState('title')
     setDiceResult(null)
   }
