@@ -1,6 +1,7 @@
 const BGM_FILES = {
   overworld: '/audio/bgm/overworld.mp3',
   boss:      '/audio/bgm/boss.mp3',
+  title:     '/audio/bgm/Sunset Castle Menu.mp3',
 }
 
 const SFX_FILES = {
@@ -51,6 +52,10 @@ export function playSfx(name, volumeScale = 1) {
   clone.play().catch(() => {})
 }
 
+export function playHover() {
+  playSfx('click', 0.1)
+}
+
 export function playBgm(name, loop = true) {
   if (currentBgm === name && bgmAudio && !bgmAudio.paused) return
   stopBgm()
@@ -58,7 +63,7 @@ export function playBgm(name, loop = true) {
   currentBgm = name
   bgmAudio = new Audio(BGM_FILES[name])
   bgmAudio.loop = loop
-  bgmAudio.volume = muted ? 0 : bgmVolume * 0.15
+  bgmAudio.volume = muted ? 0 : bgmVolume * (name === 'title' ? 0.13 : 0.15)
   bgmAudio.play().catch(() => {})
 }
 

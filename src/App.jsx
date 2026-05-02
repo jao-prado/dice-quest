@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
-import { unlockAudio, playSfx, playBgm, fadeToBgm, stopBgm } from './audio/AudioManager'
+import { unlockAudio, playSfx, playHover, fadeToBgm, stopBgm } from './audio/AudioManager'
 import AudioSettings from './AudioSettings'
 import campoBatalha from './assets/cenario.png'
+import bgTituloImg  from './assets/background_tela_inicial.png'
 import heroi_parado  from './ARTES/HEROI/heroi_parado.png'
 import heroi_ataque1 from './ARTES/HEROI/heroi_comecando_atacar.png'
 import heroi_ataque2 from './ARTES/HEROI/heroi_ataque_finalizado.png'
@@ -119,8 +120,12 @@ export default function App() {
   const [showInventory, setShowInventory] = useState(false)
   const [perkChosen, setPerkChosen] = useState(false)
   const [canCounterAttack, setCanCounterAttack] = useState(false)
+  const [titleBgmStarted, setTitleBgmStarted] = useState(false)
+  const [showMusicPrompt, setShowMusicPrompt] = useState(true)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
+  const hoveredBtn = useRef(null)
+  const lastHoverTime = useRef(0)
 
   // BGM automático por estado
   useEffect(() => {
@@ -132,6 +137,23 @@ export default function App() {
       playSfx('gameover')
     }
   }, [gameState, enemy?.type])
+
+  const startTitleBgm = () => {
+    unlockAudio()
+    if (!titleBgmStarted) { setTitleBgmStarted(true); fadeToBgm('title') }
+  }
+
+  const acceptMusic = () => {
+    setShowMusicPrompt(false)
+    unlockAudio()
+    setTitleBgmStarted(true)
+    fadeToBgm('title')
+  }
+
+  const declineMusic = () => {
+    setShowMusicPrompt(false)
+    unlockAudio()
+  }
 
   const playHeroAttack = (cb) => {
     setHeroAnim('atk1')
@@ -381,22 +403,56 @@ export default function App() {
   const potions = player.inventory.filter(i => i === 'pocao').length
 
   return (
-    <div className="game">
+    <div className="game" onMouseOver={(e) => {
+      const btn = e.target.closest('button')
+      const now = Date.now()
+      if (btn && btn !== hoveredBtn.current && now - lastHoverTime.current > 80) {
+        hoveredBtn.current = btn
+        lastHoverTime.current = now
+        playHover()
+      }
+      if (!btn) hoveredBtn.current = null
+    }}>
 
       {/* TITLE */}
       {gameState === 'title' && (
         <div className="title-screen">
-          <div className="title-bg" />
+          <img src={bgTituloImg} alt="" className="title-bg-img" />
+
           <div className="title-content">
-            <div className="title-logo">
-              <img src={IC.titulo} alt="logo" className="title-logo-img" />
-              <p className="title-sub">Roguelite de Dados</p>
+            <img src={IC.ti_titulo} alt="Dice Quest" className="ti-logo" />
+
+            <div className="ti-buttons">
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); fadeToBgm('overworld'); setGameState('menu') }}>
+                <img src={IC.ti_comecar_jogo} alt="Começar Jogo" />
+              </button>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click') }}>
+                <img src={IC.ti_tutorial} alt="Tutorial" />
+              </button>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); fadeToBgm('overworld'); setGameState('menu') }}>
+                <img src={IC.ti_menu} alt="Menu" />
+              </button>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click') }}>
+                <img src={IC.ti_feedback} alt="Feedback" />
+              </button>
             </div>
-            <button className="img-btn title-btn" onClick={() => { unlockAudio(); fadeToBgm('overworld'); playSfx('click'); playSfx('start_run'); setGameState('menu') }}>
-              <img src={IC.comecar_jogo} alt="Jogar" />
-            </button>
-            <p className="title-hint">Sobreviva o maximo que puder</p>
           </div>
+
+          <div className="ti-bottom-left">
+            <button className="ti-icon-btn" onClick={() => { startTitleBgm(); playSfx('click') }}><img src={IC.ti_config}      alt="Config" /></button>
+            <button className="ti-icon-btn" onClick={() => { startTitleBgm(); playSfx('click') }}><img src={IC.ti_conquista}   alt="Conquistas" /></button>
+            <button className="ti-icon-btn" onClick={() => { startTitleBgm(); playSfx('click') }}><img src={IC.ti_estatistica} alt="Estatísticas" /></button>
+          </div>
+
+          {showMusicPrompt && (
+            <div className="music-prompt">
+              <p>🎵 Ativar músicas e sons?</p>
+              <div className="music-prompt-btns">
+                <button onClick={acceptMusic}>SIM</button>
+                <button onClick={declineMusic}>NÃO</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

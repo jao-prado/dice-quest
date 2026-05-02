@@ -19,12 +19,24 @@ import engrenagem      from './ARTES/ICONS/engrenagem.png'
 import reroll          from './ARTES/ICONS/REROLL.png'
 import titulo          from './ARTES/ICONS/titulo.png'
 
+import ti_comecar_jogo  from './ARTES/TELA INICIAL/começar_jogo.png'
+import ti_tutorial      from './ARTES/TELA INICIAL/tutorial.png'
+import ti_menu          from './ARTES/TELA INICIAL/menu.png'
+import ti_feedback      from './ARTES/TELA INICIAL/feedback.png'
+import ti_titulo        from './ARTES/TELA INICIAL/titulo.png'
+import ti_dice          from './ARTES/TELA INICIAL/dice.png'
+import ti_config        from './ARTES/TELA INICIAL/config_tela_inicial.png'
+import ti_conquista     from './ARTES/TELA INICIAL/conquista_tela_inicial.png'
+import ti_estatistica   from './ARTES/TELA INICIAL/estatistica_tela_inicial.png'
+
 export const IC = {
   caveira, coletar, comecar_jogo,
   enfrentar_boss, escudo, espada, estrela,
   game_over, level_up, mochila,
   peark_agilidade, peark_dano, peark_defesa, peark_sorte, peark_vida,
   engrenagem, pocao, proximo_enc, reroll, titulo,
+  ti_comecar_jogo, ti_tutorial, ti_menu, ti_feedback,
+  ti_titulo, ti_dice, ti_config, ti_conquista, ti_estatistica,
 }
 
 export function Icon({ name, size = 22, style = {} }) {
