@@ -1,16 +1,16 @@
 import { useState, useEffect } from 'react'
 import { playSfx } from './audio/AudioManager'
-import heroi_parado from './ARTES/HEROI/heroi_parado.png'
-import bau_fechado  from './ARTES/ITEM/bau.png'
-import bau_abrindo  from './ARTES/ITEM/bau_abrindo.png'
-import bau_aberto   from './ARTES/ITEM/coletando_item.png'
-import cenario      from './assets/cenario.png'
+import heroi_parado from './assets/sprites/hero/heroi_parado.png'
+import bau_fechado  from './assets/sprites/items/bau.png'
+import bau_abrindo  from './assets/sprites/items/bau_abrindo.png'
+import bau_aberto   from './assets/sprites/items/coletando_item.png'
+import cenario      from './assets/backgrounds/cenario.png'
 import ItemPopup    from './ItemPopup'
 
-import pocao_vida   from './ARTES/ITEM/pocao_vida.png'
-import pocao_cura   from './ARTES/ITEM/pocao_cura.png'
-import pocao_defesa from './ARTES/ITEM/pocao_defesa.png'
-import pocao_forca  from './ARTES/ITEM/pocao_forca.png'
+import pocao_vida   from './assets/sprites/items/pocao_vida.png'
+import pocao_cura   from './assets/sprites/items/pocao_cura.png'
+import pocao_defesa from './assets/sprites/items/pocao_defesa.png'
+import pocao_forca  from './assets/sprites/items/pocao_forca.png'
 
 export const LOOT_TABLE = [
   { id: 'poção',        name: 'POÇÃO DE VIDA',   desc: 'Restaura 5 HP',          sprite: pocao_vida   },

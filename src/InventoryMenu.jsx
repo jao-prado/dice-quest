@@ -1,7 +1,7 @@
-import pocao_vida   from './ARTES/ITEM/pocao_vida.png'
-import pocao_cura   from './ARTES/ITEM/pocao_cura.png'
-import pocao_defesa from './ARTES/ITEM/pocao_defesa.png'
-import pocao_forca  from './ARTES/ITEM/pocao_forca.png'
+import pocao_vida   from './assets/sprites/items/pocao_vida.png'
+import pocao_cura   from './assets/sprites/items/pocao_cura.png'
+import pocao_defesa from './assets/sprites/items/pocao_defesa.png'
+import pocao_forca  from './assets/sprites/items/pocao_forca.png'
 import { IC } from './icons'
 
 // mapa de id → sprite + info

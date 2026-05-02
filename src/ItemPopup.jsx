@@ -1,4 +1,4 @@
-import imgColetar from './ARTES/ICONS/coletar.png'
+import imgColetar from './assets/ui/icons/coletar.png'
 
 export default function ItemPopup({ item, onCollect }) {
   return (
