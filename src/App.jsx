@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import './App.css'
 import { unlockAudio, playSfx, playHover, fadeToBgm, stopBgm } from './audio/AudioManager'
 import AudioSettings from './AudioSettings'
@@ -14,6 +14,8 @@ import DiceRollAnimation from './DiceRollAnimation'
 import DamagePopup from './DamagePopup'
 import { Icon, IC } from './icons'
 import InventoryMenu, { ITEM_DATA } from './InventoryMenu'
+import { useCombatQueue } from './useCombatQueue'
+import { useHeroDamagePopups } from './useHeroDamagePopups'
 
 const PERKS = [
   { id: 'damage',  name: 'Dano',      icon: 'peark_dano',      desc: (lv) => `+${DMG_PER_LEVEL[Math.min(lv+1,5)]} dano` },
@@ -110,9 +112,9 @@ const rollD8 = (luckLevel = 0) => {
 }
 
 const initialPlayer = {
-  hp: 30, maxHp: 30, xp: 0, level: 1, phase: 1,
-  perks: {}, inventory: ['pocao', 'pocao'],
-  baseDmg: 12,
+  hp: 300000, maxHp: 3000, xp: 0, level: 1, phase: 1,
+  perks: {}, inventory: ['poção', 'poção'],
+  baseDmg: 200,
 }
 
 const HP_PER_LEVEL    = [0, 3, 6, 9, 13, 18]
@@ -140,7 +142,7 @@ function HeroSprite({ anim }) {
   return <img src={src} alt="hero" className="sprite hero-sprite" />
 }
 
-function EnemySprite({ anim, type, dying, onDyingDone }) {
+function EnemySprite({ anim, type, dying, dead, onDyingDone }) {
   const src = anim === 'atk' ? monstro_ataque : monstro_parado
   const isBoss  = type === 'boss'
   const isElite = type === 'elite'
@@ -148,6 +150,7 @@ function EnemySprite({ anim, type, dying, onDyingDone }) {
   return (
     <img
       src={src} alt="enemy" className={cls}
+      style={dead ? { visibility: 'hidden' } : undefined}
       onAnimationEnd={dying ? onDyingDone : undefined}
     />
   )
@@ -165,23 +168,28 @@ export default function App() {
   const [showDice,    setShowDice]    = useState(false)
   const [pendingDice, setPendingDice] = useState(null)
   const [enemyDmgPop, setEnemyDmgPop] = useState(null)
+  const [dmgPopups,    setDmgPopups]    = useState([]) // popups individuais
+  const [totalPopup,   setTotalPopup]   = useState(null) // popup de total
   const [heroDmgQueue, setHeroDmgQueue] = useState([])
   const [enemyHit,    setEnemyHit]    = useState(false)
-  const [heroHit,     setHeroHit]     = useState(false)
-  const [heroDodge,   setHeroDodge]   = useState(false)
-  const [heroBlock,   setHeroBlock]   = useState(false)
-  const [showInventory, setShowInventory] = useState(false)
+  const [dmgAccum,    setDmgAccum]    = useState(0)
+  const [showDmgAccum, setShowDmgAccum] = useState(false)
+  const [heroDmgPreview, setHeroDmgPreview] = useState(null) // { dmg, token }
   const [perkChosen, setPerkChosen] = useState(false)
   const [perkQueue,  setPerkQueue]  = useState([])
   const [canCounterAttack, setCanCounterAttack] = useState(false)
   const [selectingTarget, setSelectingTarget] = useState(false)
   const [pendingRoll,   setPendingRoll]   = useState(null)
   const [dyingIds,      setDyingIds]      = useState([])
+  const [allEnemies,    setAllEnemies]    = useState([])
   const [combatOver,    setCombatOver]    = useState(false)
   const [titleBgmStarted, setTitleBgmStarted] = useState(false)
   const [showMusicPrompt, setShowMusicPrompt] = useState(true)
+  const [fading,        setFading]        = useState(false)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
+  const [heroAnimEvt, setHeroAnimEvt] = useState({ type: null, token: 0 })
+  const [showInventory, setShowInventory] = useState(false)
   const hoveredBtn = useRef(null)
   const lastHoverTime = useRef(0)
   const enemiesRef = useRef([])
@@ -202,6 +210,11 @@ export default function App() {
       playSfx('gameover')
     }
   }, [gameState, isBossPhase])
+
+  const fadeToState = (state, delay = 0) => {
+    setFading(true)
+    setTimeout(() => { setGameState(state); setFading(false) }, 200 + delay)
+  }
 
   const startTitleBgm = () => {
     unlockAudio()
@@ -232,21 +245,40 @@ export default function App() {
 
   const isItemPhase = (phase) => phase % 3 === 0 && phase % 5 !== 0
 
+  const { enqueueAll, resolveAnimation, waitForAnim } = useCombatQueue()
+  const { spawnDmgPopup, removePopup, clearAll: clearDmgPopups, flushDamage } = useHeroDamagePopups(setDmgPopups, setTotalPopup)
+
   const pushHeroDmg = (val) => {
     setHeroDmgQueue(q => [...q, val])
   }
+  const afterBlockCbRef = useRef(null)
+
   const onHeroDmgDone = () => {
-    setHeroDmgQueue(q => q.slice(1))
+    setHeroDmgQueue(q => {
+      const next = q.slice(1)
+      if (next.length === 0 && afterBlockCbRef.current) {
+        const cb = afterBlockCbRef.current
+        afterBlockCbRef.current = null
+        setTimeout(cb, 100)
+      }
+      return next
+    })
   }
 
   const startPhase = (p = player) => {
     if (isItemPhase(p.phase)) { setGameState('item'); return }
     const es = getEnemies(p.phase)
     setEnemies(es)
+    setAllEnemies(es)
     setDyingIds([])
     setCombatOver(false)
     setRolling(false)
+    setHeroAnimEvt(prev => ({ type: 'idle', token: prev.token }))
     setHeroDmgQueue([])
+    clearDmgPopups()
+    setDmgAccum(0)
+    setShowDmgAccum(false)
+    setHeroDmgPreview(null)
     setEnemyAnims(Object.fromEntries(es.map(e => [e.id, 'idle'])))
     setDiceResult(null)
     setHeroAnim('idle')
@@ -328,38 +360,70 @@ export default function App() {
       if (target && Math.max(0, target.hp - dmg) <= 0) {
         setRolling(true)
         setCombatPhase({ type: 'hit', targetId })
+        afterCb('afterDeath')
         return
       }
       afterCb()
     })
   }
 
-  const doEnemyTurns = (enemyList, idx = 0) => {
-    if (idx >= enemyList.length) { setTimeout(() => setRolling(false), 500); return }
-    if (enemyList.length >= 3 && idx === 2) { setTimeout(() => setRolling(false), 500); return }
-    const e = enemyList[idx]
-    playEnemyAttack(e.id, () => {
-      doEnemyDamage(false, 0, 1, true, e)
-      setTimeout(() => doEnemyTurns(enemyList, idx + 1), 900)
+  const enqueueEnemyTurns = (enemyList, allowDodge = true) => {
+    const events = enemyList.map(e => async () => {
+      if (playerRef.current.hp <= 0) return
+      await new Promise(resolve => playEnemyAttack(e.id, resolve))
+      const result = calcEnemyDamage(false, 0, 1, allowDodge, e)
+      if (result.type === 'dodge') {
+        playSfx('esquiva')
+        pushHeroDmg('dodge')
+        setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
+        await waitForAnim()
+      } else if (result.type === 'block') {
+        playSfx('defend')
+        pushHeroDmg(0)
+        setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
+        await waitForAnim()
+      } else if (result.type === 'hit') {
+        playSfx('hit')
+        spawnDmgPopup(result.dmg) // não bloqueia — turno continua imediatamente
+      }
     })
+    enqueueAll(events)
   }
 
+  const afterDeathCbRef = useRef(null)
+
   const resolveAttack = (roll, targetId = 0) => {
-    doHeroAttack(roll, targetId, () => {
-      setTimeout(() => {
+    doHeroAttack(roll, targetId, (flag) => {
+      const run = () => {
         const alive = enemiesRef.current.filter(e => e.hp > 0)
-        doEnemyTurns(alive)
-      }, 1500)
+        enqueueEnemyTurns(alive)
+        // No final da fila, mostrar acumulador se houver
+        enqueueAll([async () => {
+          // aguarda o merge timer do hook disparar e aplicar o dano
+          await new Promise(r => setTimeout(r, 700))
+          flushDamage(applyHeroDamage)
+          setRolling(false)
+        }])
+      }
+      if (flag === 'afterDeath') { afterDeathCbRef.current = run }
+      else { setTimeout(run, 1500) }
     })
   }
 
   const resolveCounter = (roll, targetId = 0) => {
     setCanCounterAttack(false)
-    doHeroAttack(roll, targetId, () => {
-      setTimeout(() => {
+    doHeroAttack(roll, targetId, (flag) => {
+      const run = () => {
         const alive = enemiesRef.current.filter(e => e.hp > 0)
-        doEnemyTurns(alive)
-      }, 1500)
+        enqueueEnemyTurns(alive)
+        enqueueAll([async () => {
+          await new Promise(r => setTimeout(r, 700))
+          flushDamage(applyHeroDamage)
+          setRolling(false)
+        }])
+      }
+      if (flag === 'afterDeath') { afterDeathCbRef.current = run }
+      else { setTimeout(run, 1500) }
     })
   }
 
@@ -367,90 +431,147 @@ export default function App() {
     const blocked = roll >= 5
     const alive = enemiesRef.current.filter(e => e.hp > 0)
     if (blocked) {
-      playEnemyAttack(alive[0]?.id ?? 0, () => {
+      const events = []
+      // Primeiro inimigo ataca e é bloqueado
+      events.push(async () => {
+        await new Promise(resolve => {
+          playEnemyAttack(alive[0]?.id ?? 0, resolve)
+        })
         playSfx('defend')
-        playSfx('hit', 0.15)
         pushHeroDmg(0)
-        setHeroBlock(true)
-        setTimeout(() => setHeroBlock(false), 450)
-        if (roll === 8) {
+        setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
+        await waitForAnim()
+      })
+      // Se roll === 8, contra-ataque
+      if (roll === 8) {
+        events.push(async () => {
           const p = playerRef.current
           const stats = applyPerks(p, p.perks, p.phase)
           const counterDmg = Math.max(1, Math.round((stats.baseDmg + (p.tempDmg || 0)) * 0.2))
           const firstAlive = alive[0]
           if (firstAlive) {
+            // 1. mostra "CONTRA-ATAQUE!" no inimigo antes do dano
+            setEnemyDmgPop({ id: firstAlive.id, dmg: 0, type: 'counter' })
+            await waitForAnim() // aguarda popup counter sumir
+            // 2. aplica dano — pequeno delay para o popup de dano aparecer antes de continuar
             const newHp = Math.max(0, firstAlive.hp - counterDmg)
             setEnemies(prev => prev.map(e => e.id === firstAlive.id ? { ...e, hp: newHp } : e))
             setEnemyHit(true)
             setEnemyDmgPop({ id: firstAlive.id, dmg: counterDmg })
-            pushHeroDmg('counter')
             playSfx('attack_strong')
             setTimeout(() => setEnemyHit(false), 500)
-            if (newHp <= 0) { setCombatPhase({ type: 'hit', targetId: firstAlive.id }); setRolling(false); return }
+            await new Promise(r => setTimeout(r, 500))
+            if (newHp <= 0) {
+              setCombatPhase({ type: 'hit', targetId: firstAlive.id })
+              return
+            }
           }
-        }
-        const remaining = alive.slice(1)
-        if (remaining.length > 0) {
-          setTimeout(() => doEnemyTurns(remaining), 800)
-        } else {
-          setCanCounterAttack(true)
-          setRolling(false)
+        })
+      }
+      // Inimigos restantes atacam sem allowDodge
+      const remaining = alive.slice(1)
+      if (remaining.length > 0) {
+        events.push(...remaining.map(e => async () => {
+          if (playerRef.current.hp <= 0) return
+          await new Promise(resolve => {
+            playEnemyAttack(e.id, resolve)
+          })
+          const result = calcEnemyDamage(false, 0, 1, false, e) // allowDodge = false
+          if (result.type === 'dodge') {
+            playSfx('esquiva')
+            pushHeroDmg('dodge')
+            setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
+            await waitForAnim()
+          } else if (result.type === 'block') {
+            playSfx('defend')
+            pushHeroDmg(0)
+            setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
+            await waitForAnim()
+          } else if (result.type === 'hit') {
+            playSfx('hit')
+            spawnDmgPopup(result.dmg)
+          }
+        }))
+      }
+      events.push(async () => {
+        await new Promise(r => setTimeout(r, 700))
+        flushDamage(applyHeroDamage)
+        setCanCounterAttack(true)
+        setRolling(false)
+      })
+      enqueueAll(events)
+    } else {
+      // Defesa falhou
+      const failMult = { 4: 1.10, 3: 1.15, 2: 1.23, 1: 1.35 }[roll] ?? 1
+      const events = []
+      events.push(async () => {
+        await new Promise(resolve => {
+          playEnemyAttack(alive[0]?.id ?? 0, resolve)
+        })
+        const result = calcEnemyDamage(false, 0, failMult, false, alive[0])
+        if (result.type === 'hit') {
+          playSfx('hit')
+          spawnDmgPopup(result.dmg)
         }
       })
-      return
+      const rest = alive.slice(1)
+      if (rest.length > 0) {
+        events.push(...rest.map(e => async () => {
+          if (playerRef.current.hp <= 0) return
+          await new Promise(resolve => {
+            playEnemyAttack(e.id, resolve)
+          })
+          const result = calcEnemyDamage(false, 0, 1, true, e)
+          if (result.type === 'dodge') {
+            playSfx('esquiva')
+            pushHeroDmg('dodge')
+            setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
+            await waitForAnim()
+          } else if (result.type === 'block') {
+            playSfx('defend')
+            pushHeroDmg(0)
+            setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
+            await waitForAnim()
+          } else if (result.type === 'hit') {
+            playSfx('hit')
+            spawnDmgPopup(result.dmg)
+          }
+        }))
+      }
+      events.push(async () => {
+        await new Promise(r => setTimeout(r, 700))
+        flushDamage(applyHeroDamage)
+        setRolling(false)
+      })
+      enqueueAll(events)
     }
-    const failMult = { 4: 1.10, 3: 1.15, 2: 1.23, 1: 1.35 }[roll] ?? 1
-    playEnemyAttack(alive[0]?.id ?? 0, () => {
-      doEnemyDamage(false, 0, failMult, false, alive[0])
-      setTimeout(() => {
-        const rest = enemiesRef.current.filter(e => e.hp > 0).slice(1)
-        if (rest.length > 0) doEnemyTurns(rest)
-        else setTimeout(() => setRolling(false), 1500)
-      }, 1200)
-    })
   }
 
-  const doEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true, attacker = null) => {
+  const calcEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true, attacker = null) => {
     const currentEnemies = enemiesRef.current
     const src = attacker ?? currentEnemies.find(e => e.hp > 0) ?? currentEnemies[0]
-    if (!src) return
+    if (!src) return { type: 'none' }
     const p = playerRef.current
     const stats = applyPerks(p, p.perks, p.phase)
     const aliveCount = currentEnemies.filter(e => e.hp > 0).length
     const groupMult = groupDmgMult(aliveCount)
-    if (allowDodge && stats.agility > 0 && Math.random() < stats.agility) {
-      playSfx('esquiva')
-      pushHeroDmg('dodge')
-      setHeroDodge(true)
-      setTimeout(() => setHeroDodge(false), 550)
-      return
-    }
+    const dodged = allowDodge && stats.agility > 0 && Math.random() < stats.agility
+    if (dodged) return { type: 'dodge' }
     const tempDefense = p.tempDefense || 0
     if (tempDefense > 0) {
       setPlayer(prev => ({ ...prev, tempDefense: 0 }))
-      pushHeroDmg(0)
-      playSfx('defend')
-      return
+      return { type: 'block', dmg: 0 }
     }
     const eRoll = rollD8()
     const { mult: eMult } = getDiceEffect(eRoll)
     let dmg = Math.max(1, Math.round(src.dmg * eMult * failMult * groupMult))
     if (isDefending) dmg = Math.max(0, dmg - Math.floor(defRoll / 2))
     dmg = Math.max(0, dmg - (stats.defense || 0))
-    if (dmg === 0) {
-      if (allowDodge) {
-        playSfx('defend')
-        pushHeroDmg(0)
-        setHeroBlock(true)
-        setTimeout(() => setHeroBlock(false), 450)
-        return
-      }
-      dmg = 1
-    }
-    playSfx('hit')
-    pushHeroDmg(dmg)
-    setHeroHit(true)
-    setTimeout(() => setHeroHit(false), 500)
+    if (dmg === 0) return { type: 'block', dmg: 0 }
+    return { type: 'hit', dmg }
+  }
+
+  const applyHeroDamage = (dmg) => {
     setPlayer(p => {
       const newHp = p.hp - dmg
       if (newHp <= 0) {
@@ -482,7 +603,7 @@ export default function App() {
         const remaining = prev.filter(e => e.id !== targetId)
         if (remaining.length > 0) {
           setCombatPhase('idle')
-          setRolling(false)
+          // não reseta rolling — inimigos ainda vão atacar via afterDeathCb
           return remaining
         }
         setCombatOver(true)
@@ -502,14 +623,13 @@ export default function App() {
           if (levelsGained > 0) {
             playSfx('levelup', 0.3)
             playSfx('levelup_complete', 0.3)
-            // enfileira N telas de perk
             const choices = Array.from({ length: levelsGained }, () => pickPerks())
             setPerkQueue(choices)
             setPerkChoices(choices[0])
             setPerkChosen(false)
-            setTimeout(() => setGameState('levelup'), 100)
+            setTimeout(() => fadeToState('levelup'), 100)
           } else {
-            setTimeout(() => setGameState('menu'), 100)
+            setTimeout(() => fadeToState('menu'), 100)
           }
           return { ...p, xp, level, maxHp, hp, phase: phase + 1 }
         })
@@ -540,7 +660,7 @@ export default function App() {
       setPerkChoices(remaining[0])
       setPerkChosen(false)
     } else {
-      setTimeout(() => setGameState('menu'), 100)
+      setTimeout(() => fadeToState('menu'), 100)
     }
   }
 
@@ -676,26 +796,25 @@ export default function App() {
         <div className="combat-screen">
           <div className="combat-scene" style={{ backgroundImage: `url(${campoBatalha})` }}>
 
-            <div className={`scene-hero${heroHit ? ' hero-hit' : heroDodge ? ' hero-dodge' : heroBlock ? ' hero-block' : ''}`}>
+            <div key={heroAnimEvt.token} className={`scene-hero${heroAnimEvt.type === 'hit' ? ' hero-hit' : heroAnimEvt.type === 'dodge' ? ' hero-dodge' : heroAnimEvt.type === 'block' ? ' hero-block' : ''}`} onAnimationEnd={() => resolveAnimation()}>
               <HeroSprite anim={heroAnim} />
             </div>
 
             <div className="enemies-container">
-              {enemies.map((e, i) => {
+              {allEnemies.map((ae, i) => {
+                const e = enemies.find(x => x.id === ae.id) ?? ae
+                const isDead = !enemies.find(x => x.id === ae.id) && !dyingIds.includes(ae.id)
                 const isDying = dyingIds.includes(e.id)
                 const isHit = enemyHit && enemyDmgPop?.id === e.id
-                const isTargetable = selectingTarget && !isDying
-                const phaseObj = combatPhase
-                const thisDying = typeof phaseObj === 'object'
-                  ? phaseObj.type === 'dying' && phaseObj.targetId === e.id
-                  : false
+                const isTargetable = selectingTarget && !isDying && !isDead
                 return (
                   <div
                     key={e.id}
                     className={`scene-enemy-wrap${isHit ? ' hit' : ''}${isTargetable ? ' targetable' : ''}`}
-                    style={{ '--enemy-idx': i, '--enemy-count': enemies.length }}
+                    style={{ '--enemy-idx': i, '--enemy-count': allEnemies.length, visibility: isDead ? 'hidden' : 'visible' }}
                     onClick={isTargetable ? () => confirmAttack(e.id) : undefined}
                   >
+                    {!isDying && !isDead && (
                     <div className="enemy-hp-bar">
                       <div className="enemy-hp-name">
                         {e.name}
@@ -704,25 +823,36 @@ export default function App() {
                       </div>
                       <div className="bar enemy-bar"><div className="bar-fill enemy-hp" style={{ width: `${(e.hp / e.maxHp) * 100}%` }} /></div>
                     </div>
-                    {enemyDmgPop?.id === e.id && (
-                      <DamagePopup damage={enemyDmgPop.dmg} type="enemy" onDone={() => {
-                        setEnemyDmgPop(null)
-                        if (typeof combatPhase === 'object' && combatPhase.type === 'hit' && combatPhase.targetId === e.id)
-                          setCombatPhase({ type: 'dying', targetId: e.id })
-                      }} />
                     )}
-                    {isTargetable && <div className="target-selector" />}
-                    {!dyingIds.includes(e.id) && (
-                      <EnemySprite
-                        anim={enemyAnims[e.id] ?? 'idle'}
-                        type={e.type}
-                        dying={typeof combatPhase === 'object' && combatPhase.type === 'dying' && combatPhase.targetId === e.id}
-                        onDyingDone={() => {
-                          setCombatPhase('idle')
-                          enemyDied(e.id)
+                    {enemyDmgPop?.id === e.id && (
+                      <DamagePopup
+                        damage={enemyDmgPop.dmg}
+                        type={enemyDmgPop.type ?? 'enemy'}
+                        onDone={() => {
+                          const snap = enemyDmgPop
+                          setEnemyDmgPop(null)
+                          if (snap?.type === 'counter') resolveAnimation()
+                          if (typeof combatPhase === 'object' && combatPhase.type === 'hit' && combatPhase.targetId === e.id)
+                            setCombatPhase({ type: 'dying', targetId: e.id })
                         }}
                       />
                     )}
+                    {isTargetable && <div className="target-selector" />}
+                    <EnemySprite
+                      anim={enemyAnims[e.id] ?? 'idle'}
+                      type={e.type}
+                      dying={typeof combatPhase === 'object' && combatPhase.type === 'dying' && combatPhase.targetId === e.id}
+                      dead={isDead || dyingIds.includes(e.id)}
+                      onDyingDone={() => {
+                        setCombatPhase('idle')
+                        enemyDied(e.id)
+                        if (afterDeathCbRef.current) {
+                          const cb = afterDeathCbRef.current
+                          afterDeathCbRef.current = null
+                          setTimeout(cb, 300)
+                        }
+                      }}
+                    />
                   </div>
                 )
               })}
@@ -748,7 +878,34 @@ export default function App() {
                   key={heroDmgQueue[0] + '_' + heroDmgQueue.length}
                   damage={heroDmgQueue[0] === 'dodge' || heroDmgQueue[0] === 'counter' ? 0 : heroDmgQueue[0]}
                   type={heroDmgQueue[0] === 'dodge' ? 'dodge' : heroDmgQueue[0] === 'counter' ? 'counter' : 'hero'}
+                  onStart={() => {
+                    const t = heroDmgQueue[0]
+                    const type = t === 'dodge' ? 'dodge' : (t === 0 || t === 'counter') ? 'block' : 'hit'
+                    setHeroAnimEvt(prev => ({ type, token: prev.token + 1 }))
+                  }}
                   onDone={onHeroDmgDone}
+                />
+              </div>
+            )}
+
+            {dmgPopups.map((p, i) => (
+              <div key={p.id} className="hero-dmg-pos">
+                <DamagePopup
+                  damage={p.value}
+                  type="individual"
+                  yOffset={i * 28}
+                  onDone={() => removePopup(p.id)}
+                />
+              </div>
+            ))}
+
+            {totalPopup && (
+              <div className="hero-dmg-pos hero-dmg-pos--total">
+                <DamagePopup
+                  key={totalPopup.id}
+                  damage={totalPopup.value}
+                  type="total"
+                  onDone={() => setTotalPopup(null)}
                 />
               </div>
             )}
@@ -826,6 +983,7 @@ export default function App() {
           <AudioSettings />
         </div>
       )}
+      {fading && <div className="screen-fade" />}
     </div>
   )
 }

@@ -6,7 +6,7 @@
   width: 100vw; height: 100vh; overflow: hidden;
   font-family: 'Press Start 2P', monospace;
   image-rendering: pixelated;
-  background: #1a1a2e;
+  background: #0e0a06;
   display: flex; flex-direction: column;
 }
 
@@ -377,7 +377,46 @@
   70%  { opacity:1; transform:translateX(-50%) translateY(-36px) scale(1); }
   100% { opacity:0; transform:translateX(-50%) translateY(-56px) scale(0.9); }
 }
+
+.damage-popup-counter {
+  animation: dmg-counter 0.7s ease-out forwards;
+  top: -40px;
+}
+@keyframes dmg-counter {
+  0%   { opacity:0; transform:translateX(-50%) translateY(0)    scale(1.3); }
+  15%  { opacity:1; transform:translateX(-50%) translateY(-16px) scale(1.05); }
+  60%  { opacity:1; transform:translateX(-50%) translateY(-48px) scale(1); }
+  100% { opacity:0; transform:translateX(-50%) translateY(-72px) scale(0.9); }
+}
+
+.damage-popup-individual {
+  animation: dmg-individual 0.85s ease-out forwards;
+  font-size: clamp(0.9rem, 2.2vw, 1.6rem) !important;
+  opacity: 0.85;
+  transform-origin: center bottom;
+  top: calc(-10px - var(--y-offset, 0px));
+}
+@keyframes dmg-individual {
+  0%   { opacity:0;   transform:translateX(-50%) translateY(0)    scale(1.2); }
+  20%  { opacity:0.9; transform:translateX(-50%) translateY(-10px) scale(1); }
+  65%  { opacity:0.7; transform:translateX(-50%) translateY(-22px) scale(0.95); }
+  100% { opacity:0;   transform:translateX(-50%) translateY(-36px) scale(0.85); }
+}
+
+.damage-popup-total {
+  animation: dmg-total 1.2s ease-out forwards;
+  font-size: clamp(1.8rem, 4.5vw, 3.2rem) !important;
+  filter: drop-shadow(0 0 8px currentColor);
+}
+@keyframes dmg-total {
+  0%   { opacity:0; transform:translateX(-50%) translateY(0)    scale(2); }
+  15%  { opacity:1; transform:translateX(-50%) translateY(-10px) scale(1.1); }
+  60%  { opacity:1; transform:translateX(-50%) translateY(-30px) scale(1); }
+  100% { opacity:0; transform:translateX(-50%) translateY(-55px) scale(0.9); }
+}
+
 .hero-dmg-pos { position: absolute; bottom: 30%; left: 18%; z-index: 10; }
+.hero-dmg-pos--total { bottom: 38%; }
 
 /* ══ INVENTORY MENU ══ */
 .inv-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.6); z-index: 20; animation: fade-in 0.2s ease-out; }
@@ -493,3 +532,5 @@
 }
 .mute-btn:hover  { background: #4a2a18; }
 .mute-btn.muted  { border-color: #c0392b; color: #c0392b; }
+
+.screen-fade { position: fixed; inset: 0; background: #0e0a06; z-index: 999; pointer-events: none; }
