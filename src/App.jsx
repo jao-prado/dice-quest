@@ -114,8 +114,11 @@ export default function App() {
   const [heroDmgPop,  setHeroDmgPop]  = useState(null)
   const [enemyHit,    setEnemyHit]    = useState(false)
   const [heroHit,     setHeroHit]     = useState(false)
+  const [heroDodge,   setHeroDodge]   = useState(false)
+  const [heroBlock,   setHeroBlock]   = useState(false)
   const [showInventory, setShowInventory] = useState(false)
   const [perkChosen, setPerkChosen] = useState(false)
+  const [canCounterAttack, setCanCounterAttack] = useState(false)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
 
@@ -151,6 +154,7 @@ export default function App() {
     setHeroAnim('idle')
     setEnemyAnim('idle')
     setCombatPhase('idle')
+    setCanCounterAttack(false)
     setGameState('combat')
   }
 
@@ -167,7 +171,7 @@ export default function App() {
     const roll = rollD8(player.perks.luck || 0)
     setDiceResult(roll)
     setShowDice(true)
-    setPendingDice({ roll, action: 'attack' })
+    setPendingDice({ roll, action: canCounterAttack ? 'counter' : 'attack' })
   }
 
   const handleDefend = () => {
@@ -183,11 +187,12 @@ export default function App() {
   const onDiceAnimDone = () => {
     setShowDice(false)
     const { roll, action } = pendingDice
-    if (action === 'attack') resolveAttack(roll)
+    if (action === 'attack')  resolveAttack(roll)
+    else if (action === 'counter') resolveCounter(roll)
     else resolveDefend(roll)
   }
 
-  const resolveAttack = (roll) => {
+  const doHeroAttack = (roll, afterCb) => {
     const { mult } = getDiceEffect(roll)
     const stats = applyPerks(player, player.perks)
     const forcaBonus = player.tempDmg || 0
@@ -195,7 +200,6 @@ export default function App() {
     const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(baseDmgTotal * mult))
     if (forcaBonus > 0) setPlayer(p => ({ ...p, tempDmg: 0 }))
     const newEnemyHp = Math.max(0, enemy.hp - dmg)
-
     const sfxHit = mult >= 2 ? 'attack_critical' : mult >= 1.5 ? 'attack_strong' : 'attack'
     playHeroAttack(() => {
       setEnemy(e => ({ ...e, hp: newEnemyHp }))
@@ -204,11 +208,25 @@ export default function App() {
       if (mult === 0) playSfx('defend')
       else playSfx(sfxHit, mult >= 2 ? 0.25 : 1)
       setTimeout(() => setEnemyHit(false), 500)
+      if (newEnemyHp <= 0) { setCombatPhase('hit'); return }
+      afterCb()
+    })
+  }
 
-      if (newEnemyHp <= 0) {
-        setCombatPhase('hit') // popup onDone vai avançar para 'dying'
-        return
-      }
+  const resolveAttack = (roll) => {
+    doHeroAttack(roll, () => {
+      setTimeout(() => {
+        playEnemyAttack(() => {
+          doEnemyDamage(false, 0)
+          setTimeout(() => setRolling(false), 1500)
+        })
+      }, 1500)
+    })
+  }
+
+  const resolveCounter = (roll) => {
+    setCanCounterAttack(false)
+    doHeroAttack(roll, () => {
       setTimeout(() => {
         playEnemyAttack(() => {
           doEnemyDamage(false, 0)
@@ -219,17 +237,47 @@ export default function App() {
   }
 
   const resolveDefend = (roll) => {
+    const blocked = roll >= 5
+    if (blocked) {
+      playEnemyAttack(() => {
+        playSfx('defend')
+        playSfx('hit', 0.15)
+        setHeroDmgPop(0)
+        setHeroBlock(true)
+        setTimeout(() => setHeroBlock(false), 450)
+        if (roll === 8) {
+          const stats = applyPerks(player, player.perks)
+          const counterDmg = Math.max(1, Math.round((stats.baseDmg + (player.tempDmg || 0)) * 0.2))
+          const newEnemyHp = Math.max(0, enemy.hp - counterDmg)
+          setEnemy(e => ({ ...e, hp: newEnemyHp }))
+          setEnemyHit(true)
+          setEnemyDmgPop(counterDmg)
+          setHeroDmgPop('counter')
+          playSfx('attack_strong')
+          setTimeout(() => setEnemyHit(false), 500)
+          if (newEnemyHp <= 0) { setCombatPhase('hit'); setRolling(false); return }
+        }
+        setCanCounterAttack(true)
+        setRolling(false)
+      })
+      return
+    }
+    const failMult = { 4: 1.10, 3: 1.15, 2: 1.23, 1: 1.35 }[roll] ?? 1
     playEnemyAttack(() => {
-      const blocked = roll >= 5
-      if (blocked) { playSfx('defend'); playSfx('hit', 0.15) }
-      doEnemyDamage(true, roll)
+      doEnemyDamage(false, 0, failMult, false)
       setTimeout(() => setRolling(false), 1500)
     })
   }
 
-  const doEnemyDamage = (isDefending, defRoll) => {
+  const doEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true) => {
     const stats = applyPerks(player, player.perks)
-    if (stats.agility > 0 && Math.random() < stats.agility) { playSfx('defend'); setHeroDmgPop(0); return }
+    if (allowDodge && stats.agility > 0 && Math.random() < stats.agility) {
+      playSfx('esquiva')
+      setHeroDmgPop('dodge')
+      setHeroDodge(true)
+      setTimeout(() => setHeroDodge(false), 550)
+      return
+    }
     const tempDefense = player.tempDefense || 0
     if (tempDefense > 0) {
       setPlayer(p => ({ ...p, tempDefense: 0 }))
@@ -239,9 +287,19 @@ export default function App() {
     }
     const eRoll = rollD8()
     const { mult: eMult } = getDiceEffect(eRoll)
-    let dmg = Math.max(1, Math.round(enemy.dmg * eMult))
-    if (isDefending) dmg = defRoll >= 5 ? 0 : Math.max(0, dmg - Math.floor(defRoll / 2))
+    let dmg = Math.max(1, Math.round(enemy.dmg * eMult * failMult))
+    if (isDefending) dmg = Math.max(0, dmg - Math.floor(defRoll / 2))
     dmg = Math.max(0, dmg - (stats.defense || 0))
+    if (dmg === 0) {
+      if (allowDodge) {
+        playSfx('defend')
+        setHeroDmgPop(0)
+        setHeroBlock(true)
+        setTimeout(() => setHeroBlock(false), 450)
+        return
+      }
+      dmg = 1
+    }
     playSfx('hit')
     setHeroDmgPop(dmg)
     setHeroHit(true)
@@ -417,7 +475,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className={`scene-hero${heroHit ? ' hero-hit' : ''}`}>
+            <div className={`scene-hero${heroHit ? ' hero-hit' : heroDodge ? ' hero-dodge' : heroBlock ? ' hero-block' : ''}`}>
               <HeroSprite anim={heroAnim} />
             </div>
 
@@ -453,7 +511,7 @@ export default function App() {
 
             {heroDmgPop !== null && (
               <div className="hero-dmg-pos">
-                <DamagePopup damage={heroDmgPop} type="hero" onDone={() => setHeroDmgPop(null)} />
+                <DamagePopup damage={heroDmgPop === 'dodge' || heroDmgPop === 'counter' ? 0 : heroDmgPop} type={heroDmgPop === 'dodge' ? 'dodge' : heroDmgPop === 'counter' ? 'counter' : 'hero'} onDone={() => setHeroDmgPop(null)} />
               </div>
             )}
 
@@ -468,14 +526,14 @@ export default function App() {
             <div className="action-bar">
               <button className="img-btn" onClick={handleAttack} disabled={rolling}>
                 <img src={IC.peark_dano} alt="Attack" />
+                {canCounterAttack && <span className="counter-badge">ATACAR!</span>}
               </button>
-              <button className="img-btn" onClick={handleDefend} disabled={rolling}>
+              <button className="img-btn" onClick={handleDefend} disabled={rolling || canCounterAttack}>
                 <img src={IC.peark_defesa} alt="Defend" />
               </button>
-              <button className="img-btn" onClick={() => { playSfx('click'); setShowInventory(true) }} disabled={rolling}>
+              <button className="img-btn" onClick={() => { playSfx('click'); setShowInventory(true) }} disabled={rolling || canCounterAttack}>
                 <img src={IC.mochila} alt="Mochila" />
               </button>
-
             </div>
 
             {showInventory && (

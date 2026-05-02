@@ -152,6 +152,24 @@
   100% { transform: translateX(0); }
 }
 
+.scene-hero.hero-dodge { animation: hero-dodge 0.55s ease-out; }
+@keyframes hero-dodge {
+  0%   { transform: translateX(0)     scaleX(1);    filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+  20%  { transform: translateX(-60px) scaleX(0.85); filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)) brightness(1.6); }
+  45%  { transform: translateX(-80px) scaleX(0.8);  filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)) brightness(1.8); }
+  70%  { transform: translateX(-30px) scaleX(0.95); filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)) brightness(1.2); }
+  100% { transform: translateX(0)     scaleX(1);    filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+}
+
+.scene-hero.hero-block { animation: hero-block 0.45s ease-out; }
+@keyframes hero-block {
+  0%   { transform: translateX(0);     filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+  15%  { transform: translateX(-18px) scaleX(0.93); filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+  35%  { transform: translateX(-22px) scaleX(0.9);  filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+  65%  { transform: translateX(-8px)  scaleX(0.97); filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+  100% { transform: translateX(0)     scaleX(1);    filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5)); }
+}
+
 
 .scene-chest { bottom: 28%; right: 22%; position: absolute; z-index: 1; filter: drop-shadow(0 8px 5px rgba(0,0,0,0.45)); }
 
@@ -290,6 +308,14 @@
   background: #f5c842; border: 2px solid #2c1810;
   font-size: 0.35rem; padding: 2px 5px; color: #2c1810;
   font-family: 'Press Start 2P', monospace;
+}
+
+.counter-badge {
+  position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
+  background: #f5c842; border: 2px solid #2c1810;
+  font-size: 0.32rem; padding: 3px 7px; color: #2c1810;
+  font-family: 'Press Start 2P', monospace; white-space: nowrap;
+  animation: blink 0.6s step-end infinite;
 }
 
 /* ══ GAME OVER ══ */

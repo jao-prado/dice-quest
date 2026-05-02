@@ -9,6 +9,7 @@ const SFX_FILES = {
   attack_strong:   '/audio/sfx/attack_strong.mp3',
   attack_critical: '/audio/sfx/attack_critical.mp3',
   defend:          '/audio/sfx/defend.mp3',
+  esquiva:         '/audio/sfx/esquiva.mp3',
   dice_roll:       '/audio/sfx/dice_roll.mp3',
   hit:             '/audio/sfx/hit.mp3',
   chest_open:      '/audio/sfx/chest_open.mp3',

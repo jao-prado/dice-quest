@@ -10,8 +10,8 @@ export default function DamagePopup({ damage, type = 'enemy', onDone }) {
 
   if (!visible) return null
 
-  const color = type === 'enemy' ? '#ff4444' : '#44aaff'
-  const text  = damage === 0 ? 'BLOCK!' : `-${damage}`
+  const color = type === 'enemy' ? '#ff4444' : type === 'dodge' ? '#ffdd44' : type === 'counter' ? '#ff9900' : '#44aaff'
+  const text  = type === 'dodge' ? 'ESQUIVA!' : type === 'counter' ? 'CONTRA-ATAQUE!' : damage === 0 ? 'BLOCK!' : `-${damage}`
 
   return (
     <div className="damage-popup" style={{ color }}>
