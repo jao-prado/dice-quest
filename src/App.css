@@ -158,18 +158,42 @@
 }
 .scene-hero .hero-sprite { width: auto; height: 100%; object-fit: contain; object-position: bottom center; }
 
-.scene-enemy {
-  bottom: 28%; right: 22%;
-  position: absolute; z-index: 1;
-  width: auto; height: 38vh;
-  filter: drop-shadow(0 6px 4px rgba(0,0,0,0.45));
-  transition: filter 0.05s;
+/* ══ ENEMIES CONTAINER ══ */
+.enemies-container {
+  position: absolute;
+  bottom: 28%; right: 4%;
   display: flex;
   align-items: flex-end;
+  gap: clamp(8px, 2vw, 24px);
+  z-index: 1;
 }
-.scene-enemy .enemy-sprite { width: auto; height: 100%; object-fit: contain; object-position: bottom center; transform: scaleX(-1); }
 
-.scene-enemy.hit { animation: enemy-hit 0.4s steps(1), enemy-shake 0.5s ease-out; }
+.scene-enemy-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 38vh;
+  filter: drop-shadow(0 6px 4px rgba(0,0,0,0.45));
+  transition: filter 0.05s;
+}
+
+.scene-enemy-wrap .enemy-sprite {
+  width: auto; height: 100%;
+  object-fit: contain; object-position: bottom center;
+  transform: scaleX(-1);
+}
+
+/* elite: tint dourado; boss: maior + roxo */
+.scene-enemy-wrap .enemy-sprite.boss-sprite {
+  height: 120%;
+  filter: hue-rotate(270deg) saturate(2) brightness(0.85);
+}
+.scene-enemy-wrap .enemy-sprite.elite-sprite {
+  filter: sepia(1) saturate(3) hue-rotate(10deg) brightness(1.1);
+}
+
+.scene-enemy-wrap.hit { animation: enemy-hit 0.4s steps(1), enemy-shake 0.5s ease-out; }
 @keyframes enemy-hit {
   0%,40%  { filter: drop-shadow(0 6px 4px rgba(0,0,0,0.45)) brightness(1) sepia(1) saturate(10) hue-rotate(-20deg); }
   20%,60% { filter: drop-shadow(0 6px 4px rgba(0,0,0,0.45)) brightness(2) sepia(1) saturate(10) hue-rotate(-20deg); }
@@ -227,16 +251,64 @@
 }
 
 
-.scene-chest { bottom: 28%; right: 22%; position: absolute; z-index: 1; filter: drop-shadow(0 8px 5px rgba(0,0,0,0.45)); }
+.scene-enemy-wrap.targetable { cursor: crosshair; }
+.scene-enemy-wrap.targetable:hover { filter: drop-shadow(0 6px 4px rgba(0,0,0,0.45)) brightness(1.15); }
 
-.enemy-hud, .player-hud { position: absolute; z-index: 1; }
-
-.enemy-hud {
-  top: 12px; left: 12px;
-  background: #f5eed8; border: 3px solid #2c2c3a;
-  box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
-  padding: 14px 20px; min-width: clamp(220px, 30vw, 340px); color: #2c2c3a;
+.target-selector {
+  position: absolute; inset: -14px;
+  pointer-events: none; z-index: 4;
+  background:
+    linear-gradient(#2d6a2d, #2d6a2d) top    left  / 28px 5px,
+    linear-gradient(#2d6a2d, #2d6a2d) top    left  / 5px 28px,
+    linear-gradient(#2d6a2d, #2d6a2d) top    right / 28px 5px,
+    linear-gradient(#2d6a2d, #2d6a2d) top    right / 5px 28px,
+    linear-gradient(#2d6a2d, #2d6a2d) bottom left  / 28px 5px,
+    linear-gradient(#2d6a2d, #2d6a2d) bottom left  / 5px 28px,
+    linear-gradient(#2d6a2d, #2d6a2d) bottom right / 28px 5px,
+    linear-gradient(#2d6a2d, #2d6a2d) bottom right / 5px 28px;
+  background-repeat: no-repeat;
+  animation: target-pulse 0.9s ease-in-out infinite;
 }
+
+@keyframes target-pulse {
+  0%,100% { opacity: 1;   filter: drop-shadow(0 0 4px #2d6a2d); }
+  50%      { opacity: 0.5; filter: drop-shadow(0 0 10px #4aaa4a); }
+}
+
+/* individual enemy HP bar */
+.enemy-hp-bar {
+  position: absolute;
+  top: -48px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  white-space: nowrap; z-index: 3;
+}
+.enemy-hp-name {
+  font-size: clamp(0.3rem, 0.7vw, 0.42rem);
+  color: #f5eed8;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
+  display: flex; align-items: center; gap: 4px;
+}
+.enemy-type-badge {
+  font-size: 0.28rem; padding: 1px 4px;
+  border: 1px solid; font-family: 'Press Start 2P', monospace;
+}
+.enemy-type-badge.elite { color: #f5c842; border-color: #f5c842; }
+.enemy-type-badge.boss  { color: #e74c3c; border-color: #e74c3c; animation: blink 0.8s step-end infinite; }
+.bar.enemy-bar {
+  width: clamp(80px, 10vw, 130px); height: 13px;
+  border: 2px solid #2c2c3a; background: #5a3a3a;
+}
+
+.target-prompt {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  background: rgba(10,8,6,0.85); border: 3px solid #f5c842;
+  color: #f5c842; font-size: clamp(0.4rem, 1vw, 0.6rem);
+  padding: 10px 20px; z-index: 10;
+  animation: blink 0.7s step-end infinite;
+  pointer-events: none;
+}
+
+.player-hud { position: absolute; z-index: 1; }
 .player-hud {
   bottom: calc(16vh + 14px); right: 12px;
   background: #f5eed8; border: 3px solid #2c2c3a;
@@ -324,6 +396,12 @@
 .inv-item-qty  { font-family: 'Press Start 2P', monospace; font-size: clamp(0.4rem, 0.9vw, 0.55rem); color: #8b6914; }
 
 /* ══ ITEM STAGE ══ */
+.scene-chest {
+  position: absolute;
+  bottom: 28%; right: 22%;
+  z-index: 1;
+  display: flex; align-items: flex-end;
+}
 .chest-sprite { height: 30vh; width: auto; image-rendering: pixelated; }
 .chest-sprite.chest-open { animation: chest-pop 0.35s ease-out; }
 @keyframes chest-pop { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }

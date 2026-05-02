@@ -23,24 +23,71 @@ const PERKS = [
   { id: 'agility', name: 'Agilidade', icon: 'peark_agilidade', desc: (lv) => `+${Math.round(AGIL_PER_LEVEL[Math.min(lv+1,5)]*100)}% chance de esquivar` },
 ]
 
-const ENEMIES = [
-  { name: 'Goblin',    hp: 8,  dmg: 3, xp: 1, type: 'normal' },
-  { name: 'Orc',       hp: 12, dmg: 4, xp: 2, type: 'normal' },
-  { name: 'Esqueleto', hp: 10, dmg: 4, xp: 2, type: 'normal' },
-]
-const BOSS = { name: 'Boss Necromante', hp: 30, dmg: 6, xp: 5, type: 'boss' }
+const NORMAL_NAMES = ['Goblin', 'Orc', 'Esqueleto', 'Zumbi', 'Lobo']
+const ELITE_NAMES  = ['Goblin Elite', 'Orc Bruto', 'Lich', 'Vampiro']
+const BOSS_NAMES   = { 10: 'Necromante', 20: 'Dragão das Sombras', 30: 'Rei Lich' }
 
-const XP_TO_LEVEL = (lvl) => lvl * 3
+const XP_TO_LEVEL = (lvl) => 20 + lvl * 10
 
-function getEnemy(phase) {
-  if (phase % 5 === 0) {
-    const hp = BOSS.hp + Math.floor(phase / 5) * 10
-    return { ...BOSS, hp, maxHp: hp }
+function normalStats(phase) {
+  const hp  = 10 + phase * 2
+  const dmg = 2 + Math.floor(phase / 5)
+  const xp  = 6 + phase
+  return { hp, dmg, xp }
+}
+
+function buildEnemy(phase, type, id) {
+  const base = normalStats(phase)
+  if (type === 'boss') {
+    const hp  = Math.round(base.hp * 2.5)
+    const dmg = base.dmg + 2
+    const xp  = (6 + phase) * 4
+    const name = BOSS_NAMES[phase] ?? 'Boss'
+    return { name, hp, maxHp: hp, dmg, xp, type: 'boss', id }
   }
-  const pool = phase < 3 ? [ENEMIES[0]] : phase < 6 ? ENEMIES.slice(0, 2) : ENEMIES
-  const base = pool[Math.floor(Math.random() * pool.length)]
-  const hp = base.hp + Math.floor(phase / 2)
-  return { ...base, hp, maxHp: hp }
+  if (type === 'elite') {
+    const hp  = Math.round(base.hp * 1.6)
+    const dmg = base.dmg + 1
+    const xp  = (6 + phase) * 2
+    const name = ELITE_NAMES[Math.floor(Math.random() * ELITE_NAMES.length)]
+    return { name, hp, maxHp: hp, dmg, xp, type: 'elite', id }
+  }
+  const name = NORMAL_NAMES[Math.floor(Math.random() * NORMAL_NAMES.length)]
+  return { name, hp: base.hp, maxHp: base.hp, dmg: base.dmg, xp: base.xp, type: 'normal', id }
+}
+
+function eliteChance(phase) {
+  if (phase >= 21) return 0.25
+  if (phase >= 16) return 0.20
+  if (phase >= 11) return 0.15
+  if (phase >= 6)  return 0.10
+  return 0
+}
+
+function getEnemyCount(phase) {
+  if (phase % 10 === 0) return 1 // boss
+  if (phase <= 10)  return 1
+  if (phase <= 17)  return Math.random() < 0.20 ? 1 : 2
+  if (phase <= 25)  return Math.random() < 0.30 ? 3 : 2
+  return Math.random() < 0.20 ? 2 : 3
+}
+
+function getEnemies(phase) {
+  if (phase % 10 === 0) return [buildEnemy(phase, 'boss', 0)]
+  const count = getEnemyCount(phase)
+  const chance = eliteChance(phase)
+  return Array.from({ length: count }, (_, i) => {
+    const type = Math.random() < chance ? 'elite' : 'normal'
+    return buildEnemy(phase, type, i)
+  })
+}
+
+// dano reduzido em grupo
+function groupDmgMult(count) {
+  if (count >= 4) return 0.50
+  if (count === 3) return 0.60
+  if (count === 2) return 0.75
+  return 1
 }
 
 function pickPerks() {
@@ -63,9 +110,9 @@ const rollD8 = (luckLevel = 0) => {
 }
 
 const initialPlayer = {
-  hp: 20, maxHp: 20, xp: 0, level: 1, phase: 1,
+  hp: 30, maxHp: 30, xp: 0, level: 1, phase: 1,
   perks: {}, inventory: ['pocao', 'pocao'],
-  baseDmg: 20,
+  baseDmg: 12,
 }
 
 const HP_PER_LEVEL    = [0, 3, 6, 9, 13, 18]
@@ -74,10 +121,15 @@ const DMG_PER_LEVEL   = [0, 1, 2, 4, 6, 9]
 const LUCK_PER_LEVEL  = [0, 0.05, 0.10, 0.18, 0.28, 0.40]
 const AGIL_PER_LEVEL  = [0, 0.06, 0.12, 0.20, 0.30, 0.40]
 
-function applyPerks(base, perks) {
+// dano base cresce +2 a cada 3 fases
+function playerBaseDmg(baseDmg, phase) {
+  return baseDmg + Math.floor((phase - 1) / 3) * 2
+}
+
+function applyPerks(base, perks, phase = 1) {
   return {
     ...base,
-    baseDmg: base.baseDmg + DMG_PER_LEVEL[Math.min(perks.damage || 0, 5)],
+    baseDmg: playerBaseDmg(base.baseDmg, phase) + DMG_PER_LEVEL[Math.min(perks.damage || 0, 5)],
     defense: DEF_PER_LEVEL[Math.min(perks.defense || 0, 5)],
     agility: AGIL_PER_LEVEL[Math.min(perks.agility || 0, 5)],
   }
@@ -88,13 +140,14 @@ function HeroSprite({ anim }) {
   return <img src={src} alt="hero" className="sprite hero-sprite" />
 }
 
-function EnemySprite({ anim, isBoss, dying, onDyingDone }) {
+function EnemySprite({ anim, type, dying, onDyingDone }) {
   const src = anim === 'atk' ? monstro_ataque : monstro_parado
-  const cls = `sprite enemy-sprite${isBoss ? ' boss-sprite' : ''}${dying ? ' enemy-dying' : ''}`
-  const style = isBoss ? { filter: 'hue-rotate(270deg) saturate(2) brightness(0.85)' } : {}
+  const isBoss  = type === 'boss'
+  const isElite = type === 'elite'
+  const cls = `sprite enemy-sprite${isBoss ? ' boss-sprite' : isElite ? ' elite-sprite' : ''}${dying ? ' enemy-dying' : ''}`
   return (
     <img
-      src={src} alt="enemy" className={cls} style={style}
+      src={src} alt="enemy" className={cls}
       onAnimationEnd={dying ? onDyingDone : undefined}
     />
   )
@@ -103,40 +156,52 @@ function EnemySprite({ anim, isBoss, dying, onDyingDone }) {
 export default function App() {
   const [player,      setPlayer]      = useState(initialPlayer)
   const [gameState,   setGameState]   = useState('title')
-  const [enemy,       setEnemy]       = useState(null)
+  const [enemies,     setEnemies]     = useState([])
   const [diceResult,  setDiceResult]  = useState(null)
   const [perkChoices, setPerkChoices] = useState([])
   const [rolling,     setRolling]     = useState(false)
   const [heroAnim,    setHeroAnim]    = useState('idle')
-  const [enemyAnim,   setEnemyAnim]   = useState('idle')
+  const [enemyAnims,  setEnemyAnims]  = useState({})
   const [showDice,    setShowDice]    = useState(false)
   const [pendingDice, setPendingDice] = useState(null)
   const [enemyDmgPop, setEnemyDmgPop] = useState(null)
-  const [heroDmgPop,  setHeroDmgPop]  = useState(null)
+  const [heroDmgQueue, setHeroDmgQueue] = useState([])
   const [enemyHit,    setEnemyHit]    = useState(false)
   const [heroHit,     setHeroHit]     = useState(false)
   const [heroDodge,   setHeroDodge]   = useState(false)
   const [heroBlock,   setHeroBlock]   = useState(false)
   const [showInventory, setShowInventory] = useState(false)
   const [perkChosen, setPerkChosen] = useState(false)
+  const [perkQueue,  setPerkQueue]  = useState([])
   const [canCounterAttack, setCanCounterAttack] = useState(false)
+  const [selectingTarget, setSelectingTarget] = useState(false)
+  const [pendingRoll,   setPendingRoll]   = useState(null)
+  const [dyingIds,      setDyingIds]      = useState([])
+  const [combatOver,    setCombatOver]    = useState(false)
   const [titleBgmStarted, setTitleBgmStarted] = useState(false)
   const [showMusicPrompt, setShowMusicPrompt] = useState(true)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
   const hoveredBtn = useRef(null)
   const lastHoverTime = useRef(0)
+  const enemiesRef = useRef([])
+  const playerRef  = useRef(player)
+  useEffect(() => { enemiesRef.current = enemies }, [enemies])
+  useEffect(() => { playerRef.current  = player  }, [player])
 
-  // BGM automático por estado
+  const isBossPhase = player.phase % 10 === 0
+
   useEffect(() => {
+    if (gameState === 'title') return
     if (gameState === 'combat') {
-      if (enemy?.type === 'boss') fadeToBgm('boss')
-      else fadeToBgm('overworld')
+      if (isBossPhase) fadeToBgm('boss')
+    } else if (gameState === 'menu') {
+      fadeToBgm('overworld')
     } else if (gameState === 'gameover') {
       stopBgm()
       playSfx('gameover')
     }
-  }, [gameState, enemy?.type])
+  }, [gameState, isBossPhase])
 
   const startTitleBgm = () => {
     unlockAudio()
@@ -160,23 +225,35 @@ export default function App() {
     setTimeout(() => { setHeroAnim('atk2'); setTimeout(() => { setHeroAnim('idle'); cb() }, 200) }, 200)
   }
 
-  const playEnemyAttack = (cb) => {
-    setEnemyAnim('atk')
-    setTimeout(() => { setEnemyAnim('idle'); cb() }, 400)
+  const playEnemyAttack = (id, cb) => {
+    setEnemyAnims(prev => ({ ...prev, [id]: 'atk' }))
+    setTimeout(() => { setEnemyAnims(prev => ({ ...prev, [id]: 'idle' })); cb() }, 400)
   }
 
   const isItemPhase = (phase) => phase % 3 === 0 && phase % 5 !== 0
 
+  const pushHeroDmg = (val) => {
+    setHeroDmgQueue(q => [...q, val])
+  }
+  const onHeroDmgDone = () => {
+    setHeroDmgQueue(q => q.slice(1))
+  }
+
   const startPhase = (p = player) => {
-    playSfx('click')
     if (isItemPhase(p.phase)) { setGameState('item'); return }
-    const e = getEnemy(p.phase)
-    setEnemy({ ...e, maxHp: e.hp })
+    const es = getEnemies(p.phase)
+    setEnemies(es)
+    setDyingIds([])
+    setCombatOver(false)
+    setRolling(false)
+    setHeroDmgQueue([])
+    setEnemyAnims(Object.fromEntries(es.map(e => [e.id, 'idle'])))
     setDiceResult(null)
     setHeroAnim('idle')
-    setEnemyAnim('idle')
     setCombatPhase('idle')
     setCanCounterAttack(false)
+    setSelectingTarget(false)
+    setPendingRoll(null)
     setGameState('combat')
   }
 
@@ -188,12 +265,29 @@ export default function App() {
 
   const handleAttack = () => {
     if (rolling) return
+    const roll = rollD8(player.perks.luck || 0)
+    setPendingRoll(roll)
+    const alive = enemiesRef.current.filter(e => e.hp > 0)
+    if (alive.length > 1) {
+      setSelectingTarget(true)
+    } else {
+      const targetId = alive[0]?.id ?? 0
+      setRolling(true)
+      playSfx('dice_roll')
+      setDiceResult(roll)
+      setShowDice(true)
+      setPendingDice({ roll, action: canCounterAttack ? 'counter' : 'attack', targetId })
+    }
+  }
+
+  const confirmAttack = (targetId = 0) => {
+    setSelectingTarget(false)
     setRolling(true)
     playSfx('dice_roll')
-    const roll = rollD8(player.perks.luck || 0)
+    const roll = pendingRoll ?? rollD8(player.perks.luck || 0)
     setDiceResult(roll)
     setShowDice(true)
-    setPendingDice({ roll, action: canCounterAttack ? 'counter' : 'attack' })
+    setPendingDice({ roll, action: canCounterAttack ? 'counter' : 'attack', targetId })
   }
 
   const handleDefend = () => {
@@ -208,114 +302,145 @@ export default function App() {
 
   const onDiceAnimDone = () => {
     setShowDice(false)
-    const { roll, action } = pendingDice
-    if (action === 'attack')  resolveAttack(roll)
-    else if (action === 'counter') resolveCounter(roll)
+    const { roll, action, targetId } = pendingDice
+    if (action === 'attack')  resolveAttack(roll, targetId ?? 0)
+    else if (action === 'counter') resolveCounter(roll, targetId ?? 0)
     else resolveDefend(roll)
   }
 
-  const doHeroAttack = (roll, afterCb) => {
+  const doHeroAttack = (roll, targetId, afterCb) => {
     const { mult } = getDiceEffect(roll)
-    const stats = applyPerks(player, player.perks)
-    const forcaBonus = player.tempDmg || 0
+    const p = playerRef.current
+    const stats = applyPerks(p, p.perks, p.phase)
+    const forcaBonus = p.tempDmg || 0
     const baseDmgTotal = stats.baseDmg + forcaBonus
     const dmg = Math.max(mult === 0 ? 0 : 1, Math.round(baseDmgTotal * mult))
-    if (forcaBonus > 0) setPlayer(p => ({ ...p, tempDmg: 0 }))
-    const newEnemyHp = Math.max(0, enemy.hp - dmg)
+    if (forcaBonus > 0) setPlayer(prev => ({ ...prev, tempDmg: 0 }))
     const sfxHit = mult >= 2 ? 'attack_critical' : mult >= 1.5 ? 'attack_strong' : 'attack'
     playHeroAttack(() => {
-      setEnemy(e => ({ ...e, hp: newEnemyHp }))
+      setEnemies(prev => prev.map(e => e.id === targetId ? { ...e, hp: Math.max(0, e.hp - dmg) } : e))
       setEnemyHit(true)
-      setEnemyDmgPop(dmg)
+      setEnemyDmgPop({ id: targetId, dmg })
       if (mult === 0) playSfx('defend')
       else playSfx(sfxHit, mult >= 2 ? 0.25 : 1)
       setTimeout(() => setEnemyHit(false), 500)
-      if (newEnemyHp <= 0) { setCombatPhase('hit'); return }
+      const target = enemiesRef.current.find(e => e.id === targetId)
+      if (target && Math.max(0, target.hp - dmg) <= 0) {
+        setRolling(true)
+        setCombatPhase({ type: 'hit', targetId })
+        return
+      }
       afterCb()
     })
   }
 
-  const resolveAttack = (roll) => {
-    doHeroAttack(roll, () => {
+  const doEnemyTurns = (enemyList, idx = 0) => {
+    if (idx >= enemyList.length) { setTimeout(() => setRolling(false), 500); return }
+    if (enemyList.length >= 3 && idx === 2) { setTimeout(() => setRolling(false), 500); return }
+    const e = enemyList[idx]
+    playEnemyAttack(e.id, () => {
+      doEnemyDamage(false, 0, 1, true, e)
+      setTimeout(() => doEnemyTurns(enemyList, idx + 1), 900)
+    })
+  }
+
+  const resolveAttack = (roll, targetId = 0) => {
+    doHeroAttack(roll, targetId, () => {
       setTimeout(() => {
-        playEnemyAttack(() => {
-          doEnemyDamage(false, 0)
-          setTimeout(() => setRolling(false), 1500)
-        })
+        const alive = enemiesRef.current.filter(e => e.hp > 0)
+        doEnemyTurns(alive)
       }, 1500)
     })
   }
 
-  const resolveCounter = (roll) => {
+  const resolveCounter = (roll, targetId = 0) => {
     setCanCounterAttack(false)
-    doHeroAttack(roll, () => {
+    doHeroAttack(roll, targetId, () => {
       setTimeout(() => {
-        playEnemyAttack(() => {
-          doEnemyDamage(false, 0)
-          setTimeout(() => setRolling(false), 1500)
-        })
+        const alive = enemiesRef.current.filter(e => e.hp > 0)
+        doEnemyTurns(alive)
       }, 1500)
     })
   }
 
   const resolveDefend = (roll) => {
     const blocked = roll >= 5
+    const alive = enemiesRef.current.filter(e => e.hp > 0)
     if (blocked) {
-      playEnemyAttack(() => {
+      playEnemyAttack(alive[0]?.id ?? 0, () => {
         playSfx('defend')
         playSfx('hit', 0.15)
-        setHeroDmgPop(0)
+        pushHeroDmg(0)
         setHeroBlock(true)
         setTimeout(() => setHeroBlock(false), 450)
         if (roll === 8) {
-          const stats = applyPerks(player, player.perks)
-          const counterDmg = Math.max(1, Math.round((stats.baseDmg + (player.tempDmg || 0)) * 0.2))
-          const newEnemyHp = Math.max(0, enemy.hp - counterDmg)
-          setEnemy(e => ({ ...e, hp: newEnemyHp }))
-          setEnemyHit(true)
-          setEnemyDmgPop(counterDmg)
-          setHeroDmgPop('counter')
-          playSfx('attack_strong')
-          setTimeout(() => setEnemyHit(false), 500)
-          if (newEnemyHp <= 0) { setCombatPhase('hit'); setRolling(false); return }
+          const p = playerRef.current
+          const stats = applyPerks(p, p.perks, p.phase)
+          const counterDmg = Math.max(1, Math.round((stats.baseDmg + (p.tempDmg || 0)) * 0.2))
+          const firstAlive = alive[0]
+          if (firstAlive) {
+            const newHp = Math.max(0, firstAlive.hp - counterDmg)
+            setEnemies(prev => prev.map(e => e.id === firstAlive.id ? { ...e, hp: newHp } : e))
+            setEnemyHit(true)
+            setEnemyDmgPop({ id: firstAlive.id, dmg: counterDmg })
+            pushHeroDmg('counter')
+            playSfx('attack_strong')
+            setTimeout(() => setEnemyHit(false), 500)
+            if (newHp <= 0) { setCombatPhase({ type: 'hit', targetId: firstAlive.id }); setRolling(false); return }
+          }
         }
-        setCanCounterAttack(true)
-        setRolling(false)
+        const remaining = alive.slice(1)
+        if (remaining.length > 0) {
+          setTimeout(() => doEnemyTurns(remaining), 800)
+        } else {
+          setCanCounterAttack(true)
+          setRolling(false)
+        }
       })
       return
     }
     const failMult = { 4: 1.10, 3: 1.15, 2: 1.23, 1: 1.35 }[roll] ?? 1
-    playEnemyAttack(() => {
-      doEnemyDamage(false, 0, failMult, false)
-      setTimeout(() => setRolling(false), 1500)
+    playEnemyAttack(alive[0]?.id ?? 0, () => {
+      doEnemyDamage(false, 0, failMult, false, alive[0])
+      setTimeout(() => {
+        const rest = enemiesRef.current.filter(e => e.hp > 0).slice(1)
+        if (rest.length > 0) doEnemyTurns(rest)
+        else setTimeout(() => setRolling(false), 1500)
+      }, 1200)
     })
   }
 
-  const doEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true) => {
-    const stats = applyPerks(player, player.perks)
+  const doEnemyDamage = (isDefending, defRoll, failMult = 1, allowDodge = true, attacker = null) => {
+    const currentEnemies = enemiesRef.current
+    const src = attacker ?? currentEnemies.find(e => e.hp > 0) ?? currentEnemies[0]
+    if (!src) return
+    const p = playerRef.current
+    const stats = applyPerks(p, p.perks, p.phase)
+    const aliveCount = currentEnemies.filter(e => e.hp > 0).length
+    const groupMult = groupDmgMult(aliveCount)
     if (allowDodge && stats.agility > 0 && Math.random() < stats.agility) {
       playSfx('esquiva')
-      setHeroDmgPop('dodge')
+      pushHeroDmg('dodge')
       setHeroDodge(true)
       setTimeout(() => setHeroDodge(false), 550)
       return
     }
-    const tempDefense = player.tempDefense || 0
+    const tempDefense = p.tempDefense || 0
     if (tempDefense > 0) {
-      setPlayer(p => ({ ...p, tempDefense: 0 }))
-      setHeroDmgPop(0)
+      setPlayer(prev => ({ ...prev, tempDefense: 0 }))
+      pushHeroDmg(0)
       playSfx('defend')
       return
     }
     const eRoll = rollD8()
     const { mult: eMult } = getDiceEffect(eRoll)
-    let dmg = Math.max(1, Math.round(enemy.dmg * eMult * failMult))
+    let dmg = Math.max(1, Math.round(src.dmg * eMult * failMult * groupMult))
     if (isDefending) dmg = Math.max(0, dmg - Math.floor(defRoll / 2))
     dmg = Math.max(0, dmg - (stats.defense || 0))
     if (dmg === 0) {
       if (allowDodge) {
         playSfx('defend')
-        setHeroDmgPop(0)
+        pushHeroDmg(0)
         setHeroBlock(true)
         setTimeout(() => setHeroBlock(false), 450)
         return
@@ -323,7 +448,7 @@ export default function App() {
       dmg = 1
     }
     playSfx('hit')
-    setHeroDmgPop(dmg)
+    pushHeroDmg(dmg)
     setHeroHit(true)
     setTimeout(() => setHeroHit(false), 500)
     setPlayer(p => {
@@ -350,22 +475,47 @@ export default function App() {
     setShowInventory(false)
   }
 
-  const enemyDied = () => {
-    const xpGain = enemy.xp
-    setPlayer(p => {
-      const newXp = p.xp + xpGain
-      const needed = XP_TO_LEVEL(p.level)
-      if (newXp >= needed) {
-        playSfx('levelup', 0.3)
-        playSfx('levelup_complete', 0.3)
-        setPerkChoices(pickPerks())
-        setPerkChosen(false)
-        setTimeout(() => setGameState('levelup'), 100)
-        return { ...p, xp: newXp - needed, level: p.level + 1, phase: p.phase + 1 }
-      }
-      setTimeout(() => setGameState('menu'), 100)
-      return { ...p, xp: newXp, phase: p.phase + 1 }
-    })
+  const enemyDied = (targetId) => {
+    setDyingIds(prev => [...prev, targetId])
+    setTimeout(() => {
+      setEnemies(prev => {
+        const remaining = prev.filter(e => e.id !== targetId)
+        if (remaining.length > 0) {
+          setCombatPhase('idle')
+          setRolling(false)
+          return remaining
+        }
+        setCombatOver(true)
+        // rolling permanece true, action bar travada até trocar de tela
+        const xpGain = prev.reduce((s, e) => s + e.xp, 0)
+        setPlayer(p => {
+          let { xp, level, maxHp, hp, phase } = p
+          xp += xpGain
+          let levelsGained = 0
+          while (xp >= XP_TO_LEVEL(level)) {
+            xp -= XP_TO_LEVEL(level)
+            level++
+            maxHp += 3
+            hp = Math.min(hp + 3, maxHp)
+            levelsGained++
+          }
+          if (levelsGained > 0) {
+            playSfx('levelup', 0.3)
+            playSfx('levelup_complete', 0.3)
+            // enfileira N telas de perk
+            const choices = Array.from({ length: levelsGained }, () => pickPerks())
+            setPerkQueue(choices)
+            setPerkChoices(choices[0])
+            setPerkChosen(false)
+            setTimeout(() => setGameState('levelup'), 100)
+          } else {
+            setTimeout(() => setGameState('menu'), 100)
+          }
+          return { ...p, xp, level, maxHp, hp, phase: phase + 1 }
+        })
+        return []
+      })
+    }, 100)
   }
 
   const choosePerk = (perk) => {
@@ -381,14 +531,17 @@ export default function App() {
         updated.maxHp = p.maxHp + hpGain
         updated.hp = Math.min(p.hp + hpGain, updated.maxHp)
       }
-      setTimeout(() => setGameState('menu'), 100)
       return updated
     })
-  }
-
-  const removeOne = (arr, item) => {
-    const i = arr.indexOf(item)
-    return i >= 0 ? [...arr.slice(0, i), ...arr.slice(i + 1)] : arr
+    // avança para próximo perk da fila ou vai pro menu
+    const remaining = perkQueue.slice(1)
+    setPerkQueue(remaining)
+    if (remaining.length > 0) {
+      setPerkChoices(remaining[0])
+      setPerkChosen(false)
+    } else {
+      setTimeout(() => setGameState('menu'), 100)
+    }
   }
 
   const restart = () => {
@@ -403,33 +556,33 @@ export default function App() {
   const potions = player.inventory.filter(i => i === 'pocao').length
 
   return (
-    <div className="game" onMouseOver={(e) => {
-      const btn = e.target.closest('button')
-      const now = Date.now()
-      if (btn && btn !== hoveredBtn.current && now - lastHoverTime.current > 80) {
-        hoveredBtn.current = btn
-        lastHoverTime.current = now
-        playHover()
-      }
-      if (!btn) hoveredBtn.current = null
-    }}>
+    <div className="game">
 
       {/* TITLE */}
       {gameState === 'title' && (
-        <div className="title-screen">
+        <div className="title-screen" onMouseOver={(e) => {
+          const btn = e.target.closest('button')
+          const now = Date.now()
+          if (btn && btn !== hoveredBtn.current && now - lastHoverTime.current > 80) {
+            hoveredBtn.current = btn
+            lastHoverTime.current = now
+            playHover()
+          }
+          if (!btn) hoveredBtn.current = null
+        }}>
           <img src={bgTituloImg} alt="" className="title-bg-img" />
 
           <div className="title-content">
             <img src={IC.ti_titulo} alt="Dice Quest" className="ti-logo" />
 
             <div className="ti-buttons">
-              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); fadeToBgm('overworld'); setGameState('menu') }}>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); setGameState('menu') }}>
                 <img src={IC.ti_comecar_jogo} alt="Começar Jogo" />
               </button>
               <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click') }}>
                 <img src={IC.ti_tutorial} alt="Tutorial" />
               </button>
-              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); fadeToBgm('overworld'); setGameState('menu') }}>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); setGameState('menu') }}>
                 <img src={IC.ti_menu} alt="Menu" />
               </button>
               <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click') }}>
@@ -478,7 +631,7 @@ export default function App() {
                 <div className="menu-info-row">
                   <span>LV. {player.level}</span>
                   <span>FASE {player.phase}</span>
-                  {player.phase % 5 === 0 && <span className="boss-warn">BOSS!</span>}
+                  {player.phase % 10 === 0 && <span className="boss-warn">BOSS!</span>}
                 </div>
               </div>
             </div>
@@ -509,7 +662,7 @@ export default function App() {
           </div>
 
           <button className="img-btn menu-btn" onClick={() => startPhase(player)}>
-            {player.phase % 5 === 0
+            {player.phase % 10 === 0
               ? <img src={IC.enfrentar_boss} alt="Enfrentar Boss" />
               : <img src={IC.proximo_enc}    alt="Proximo Encontro" />}
           </button>
@@ -519,36 +672,60 @@ export default function App() {
       )}
 
       {/* COMBAT */}
-      {gameState === 'combat' && enemy && (
+      {gameState === 'combat' && enemies.length > 0 && (
         <div className="combat-screen">
           <div className="combat-scene" style={{ backgroundImage: `url(${campoBatalha})` }}>
-
-            <div className="enemy-hud">
-              <div className="hud-name">{enemy.name} <span>Lv.{player.phase}</span></div>
-              <div className="hud-hp-row">
-                <span className="hp-label">HP</span>
-                <div className="bar hud-bar"><div className="bar-fill enemy-hp" style={{ width: `${(enemy.hp / enemy.maxHp) * 100}%` }} /></div>
-              </div>
-            </div>
 
             <div className={`scene-hero${heroHit ? ' hero-hit' : heroDodge ? ' hero-dodge' : heroBlock ? ' hero-block' : ''}`}>
               <HeroSprite anim={heroAnim} />
             </div>
 
-            <div className={`scene-enemy${enemyHit ? ' hit' : ''}`}>
-              {enemyDmgPop !== null && (
-                <DamagePopup damage={enemyDmgPop} type="enemy" onDone={() => {
-                  setEnemyDmgPop(null)
-                  if (combatPhase === 'hit') setCombatPhase('dying')
-                }} />
-              )}
-              {combatPhase === 'dead'
-                ? null
-                : <EnemySprite anim={enemyAnim} isBoss={enemy.type === 'boss'}
-                    dying={combatPhase === 'dying'}
-                    onDyingDone={() => { setCombatPhase('dead'); enemyDied(); setRolling(false) }}
-                  />
-              }
+            <div className="enemies-container">
+              {enemies.map((e, i) => {
+                const isDying = dyingIds.includes(e.id)
+                const isHit = enemyHit && enemyDmgPop?.id === e.id
+                const isTargetable = selectingTarget && !isDying
+                const phaseObj = combatPhase
+                const thisDying = typeof phaseObj === 'object'
+                  ? phaseObj.type === 'dying' && phaseObj.targetId === e.id
+                  : false
+                return (
+                  <div
+                    key={e.id}
+                    className={`scene-enemy-wrap${isHit ? ' hit' : ''}${isTargetable ? ' targetable' : ''}`}
+                    style={{ '--enemy-idx': i, '--enemy-count': enemies.length }}
+                    onClick={isTargetable ? () => confirmAttack(e.id) : undefined}
+                  >
+                    <div className="enemy-hp-bar">
+                      <div className="enemy-hp-name">
+                        {e.name}
+                        {e.type === 'elite' && <span className="enemy-type-badge elite">ELITE</span>}
+                        {e.type === 'boss'  && <span className="enemy-type-badge boss">BOSS</span>}
+                      </div>
+                      <div className="bar enemy-bar"><div className="bar-fill enemy-hp" style={{ width: `${(e.hp / e.maxHp) * 100}%` }} /></div>
+                    </div>
+                    {enemyDmgPop?.id === e.id && (
+                      <DamagePopup damage={enemyDmgPop.dmg} type="enemy" onDone={() => {
+                        setEnemyDmgPop(null)
+                        if (typeof combatPhase === 'object' && combatPhase.type === 'hit' && combatPhase.targetId === e.id)
+                          setCombatPhase({ type: 'dying', targetId: e.id })
+                      }} />
+                    )}
+                    {isTargetable && <div className="target-selector" />}
+                    {!dyingIds.includes(e.id) && (
+                      <EnemySprite
+                        anim={enemyAnims[e.id] ?? 'idle'}
+                        type={e.type}
+                        dying={typeof combatPhase === 'object' && combatPhase.type === 'dying' && combatPhase.targetId === e.id}
+                        onDyingDone={() => {
+                          setCombatPhase('idle')
+                          enemyDied(e.id)
+                        }}
+                      />
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
 
@@ -565,10 +742,19 @@ export default function App() {
               </div>
             </div>
 
-            {heroDmgPop !== null && (
+            {heroDmgQueue.length > 0 && (
               <div className="hero-dmg-pos">
-                <DamagePopup damage={heroDmgPop === 'dodge' || heroDmgPop === 'counter' ? 0 : heroDmgPop} type={heroDmgPop === 'dodge' ? 'dodge' : heroDmgPop === 'counter' ? 'counter' : 'hero'} onDone={() => setHeroDmgPop(null)} />
+                <DamagePopup
+                  key={heroDmgQueue[0] + '_' + heroDmgQueue.length}
+                  damage={heroDmgQueue[0] === 'dodge' || heroDmgQueue[0] === 'counter' ? 0 : heroDmgQueue[0]}
+                  type={heroDmgQueue[0] === 'dodge' ? 'dodge' : heroDmgQueue[0] === 'counter' ? 'counter' : 'hero'}
+                  onDone={onHeroDmgDone}
+                />
               </div>
+            )}
+
+            {selectingTarget && (
+              <div className="target-prompt">Escolha um alvo</div>
             )}
 
             {showDice && pendingDice && (
@@ -580,14 +766,14 @@ export default function App() {
             </button>
 
             <div className="action-bar">
-              <button className="img-btn" onClick={handleAttack} disabled={rolling}>
+              <button className="img-btn" onClick={handleAttack} disabled={rolling || selectingTarget || combatOver}>
                 <img src={IC.peark_dano} alt="Attack" />
                 {canCounterAttack && <span className="counter-badge">ATACAR!</span>}
               </button>
-              <button className="img-btn" onClick={handleDefend} disabled={rolling || canCounterAttack}>
+              <button className="img-btn" onClick={handleDefend} disabled={rolling || canCounterAttack || selectingTarget || combatOver}>
                 <img src={IC.peark_defesa} alt="Defend" />
               </button>
-              <button className="img-btn" onClick={() => { playSfx('click'); setShowInventory(true) }} disabled={rolling || canCounterAttack}>
+              <button className="img-btn" onClick={() => setShowInventory(true)} disabled={rolling || canCounterAttack || selectingTarget || combatOver}>
                 <img src={IC.mochila} alt="Mochila" />
               </button>
             </div>
@@ -596,7 +782,7 @@ export default function App() {
               <InventoryMenu
                 inventory={player.inventory}
                 onUse={handleUseItem}
-                onClose={() => { playSfx('click'); setShowInventory(false) }}
+                onClose={() => setShowInventory(false)}
               />
             )}
           </div>
