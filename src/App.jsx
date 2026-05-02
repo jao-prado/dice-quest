@@ -168,13 +168,9 @@ export default function App() {
   const [showDice,    setShowDice]    = useState(false)
   const [pendingDice, setPendingDice] = useState(null)
   const [enemyDmgPop, setEnemyDmgPop] = useState(null)
-  const [dmgPopups,    setDmgPopups]    = useState([]) // popups individuais
-  const [totalPopup,   setTotalPopup]   = useState(null) // popup de total
-  const [heroDmgQueue, setHeroDmgQueue] = useState([])
-  const [enemyHit,    setEnemyHit]    = useState(false)
-  const [dmgAccum,    setDmgAccum]    = useState(0)
-  const [showDmgAccum, setShowDmgAccum] = useState(false)
-  const [heroDmgPreview, setHeroDmgPreview] = useState(null) // { dmg, token }
+  const [dmgPopups,    setDmgPopups]    = useState([])
+  const [totalPopup,   setTotalPopup]   = useState(null)
+  const [heroDmgEvt,   setHeroDmgEvt]   = useState(null)
   const [perkChosen, setPerkChosen] = useState(false)
   const [perkQueue,  setPerkQueue]  = useState([])
   const [canCounterAttack, setCanCounterAttack] = useState(false)
@@ -188,8 +184,11 @@ export default function App() {
   const [fading,        setFading]        = useState(false)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
+  const combatPhaseRef = useRef('idle')
+  const setCombatPhaseSync = (val) => { combatPhaseRef.current = val; setCombatPhase(val) }
   const [heroAnimEvt, setHeroAnimEvt] = useState({ type: null, token: 0 })
   const [showInventory, setShowInventory] = useState(false)
+  const [enemyHit, setEnemyHit] = useState(false)
   const hoveredBtn = useRef(null)
   const lastHoverTime = useRef(0)
   const enemiesRef = useRef([])
@@ -248,21 +247,8 @@ export default function App() {
   const { enqueueAll, resolveAnimation, waitForAnim } = useCombatQueue()
   const { spawnDmgPopup, removePopup, clearAll: clearDmgPopups, flushDamage } = useHeroDamagePopups(setDmgPopups, setTotalPopup)
 
-  const pushHeroDmg = (val) => {
-    setHeroDmgQueue(q => [...q, val])
-  }
-  const afterBlockCbRef = useRef(null)
-
-  const onHeroDmgDone = () => {
-    setHeroDmgQueue(q => {
-      const next = q.slice(1)
-      if (next.length === 0 && afterBlockCbRef.current) {
-        const cb = afterBlockCbRef.current
-        afterBlockCbRef.current = null
-        setTimeout(cb, 100)
-      }
-      return next
-    })
+  const spawnHeroDmgEvt = (type) => {
+    setHeroDmgEvt(prev => ({ type, token: (prev?.token ?? 0) + 1 }))
   }
 
   const startPhase = (p = player) => {
@@ -273,16 +259,13 @@ export default function App() {
     setDyingIds([])
     setCombatOver(false)
     setRolling(false)
+    setCombatPhaseSync('idle')
     setHeroAnimEvt(prev => ({ type: 'idle', token: prev.token }))
-    setHeroDmgQueue([])
+    setHeroDmgEvt(null)
     clearDmgPopups()
-    setDmgAccum(0)
-    setShowDmgAccum(false)
-    setHeroDmgPreview(null)
     setEnemyAnims(Object.fromEntries(es.map(e => [e.id, 'idle'])))
     setDiceResult(null)
     setHeroAnim('idle')
-    setCombatPhase('idle')
     setCanCounterAttack(false)
     setSelectingTarget(false)
     setPendingRoll(null)
@@ -359,7 +342,7 @@ export default function App() {
       const target = enemiesRef.current.find(e => e.id === targetId)
       if (target && Math.max(0, target.hp - dmg) <= 0) {
         setRolling(true)
-        setCombatPhase({ type: 'hit', targetId })
+        setCombatPhaseSync({ type: 'hit', targetId })
         afterCb('afterDeath')
         return
       }
@@ -374,17 +357,17 @@ export default function App() {
       const result = calcEnemyDamage(false, 0, 1, allowDodge, e)
       if (result.type === 'dodge') {
         playSfx('esquiva')
-        pushHeroDmg('dodge')
+        spawnHeroDmgEvt('dodge')
         setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
         await waitForAnim()
       } else if (result.type === 'block') {
         playSfx('defend')
-        pushHeroDmg(0)
+        spawnHeroDmgEvt('block')
         setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
         await waitForAnim()
       } else if (result.type === 'hit') {
         playSfx('hit')
-        spawnDmgPopup(result.dmg) // não bloqueia — turno continua imediatamente
+        spawnDmgPopup(result.dmg)
       }
     })
     enqueueAll(events)
@@ -438,7 +421,7 @@ export default function App() {
           playEnemyAttack(alive[0]?.id ?? 0, resolve)
         })
         playSfx('defend')
-        pushHeroDmg(0)
+        spawnHeroDmgEvt('block')
         setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
         await waitForAnim()
       })
@@ -462,7 +445,7 @@ export default function App() {
             setTimeout(() => setEnemyHit(false), 500)
             await new Promise(r => setTimeout(r, 500))
             if (newHp <= 0) {
-              setCombatPhase({ type: 'hit', targetId: firstAlive.id })
+              setCombatPhaseSync({ type: 'hit', targetId: firstAlive.id })
               return
             }
           }
@@ -476,15 +459,15 @@ export default function App() {
           await new Promise(resolve => {
             playEnemyAttack(e.id, resolve)
           })
-          const result = calcEnemyDamage(false, 0, 1, false, e) // allowDodge = false
+          const result = calcEnemyDamage(false, 0, 1, true, e) // remaining podem esquivar normalmente
           if (result.type === 'dodge') {
             playSfx('esquiva')
-            pushHeroDmg('dodge')
+            spawnHeroDmgEvt('dodge')
             setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
             await waitForAnim()
           } else if (result.type === 'block') {
             playSfx('defend')
-            pushHeroDmg(0)
+            spawnHeroDmgEvt('block')
             setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
             await waitForAnim()
           } else if (result.type === 'hit') {
@@ -496,8 +479,10 @@ export default function App() {
       events.push(async () => {
         await new Promise(r => setTimeout(r, 700))
         flushDamage(applyHeroDamage)
-        setCanCounterAttack(true)
-        setRolling(false)
+        if (enemiesRef.current.filter(e => e.hp > 0).length > 0) {
+          setCanCounterAttack(true)
+          setRolling(false)
+        }
       })
       enqueueAll(events)
     } else {
@@ -524,12 +509,12 @@ export default function App() {
           const result = calcEnemyDamage(false, 0, 1, true, e)
           if (result.type === 'dodge') {
             playSfx('esquiva')
-            pushHeroDmg('dodge')
+            spawnHeroDmgEvt('dodge')
             setHeroAnimEvt(prev => ({ type: 'dodge', token: prev.token + 1 }))
             await waitForAnim()
           } else if (result.type === 'block') {
             playSfx('defend')
-            pushHeroDmg(0)
+            spawnHeroDmgEvt('block')
             setHeroAnimEvt(prev => ({ type: 'block', token: prev.token + 1 }))
             await waitForAnim()
           } else if (result.type === 'hit') {
@@ -602,7 +587,7 @@ export default function App() {
       setEnemies(prev => {
         const remaining = prev.filter(e => e.id !== targetId)
         if (remaining.length > 0) {
-          setCombatPhase('idle')
+          setCombatPhaseSync('idle')
           // não reseta rolling — inimigos ainda vão atacar via afterDeathCb
           return remaining
         }
@@ -792,7 +777,7 @@ export default function App() {
       )}
 
       {/* COMBAT */}
-      {gameState === 'combat' && enemies.length > 0 && (
+      {gameState === 'combat' && (
         <div className="combat-screen">
           <div className="combat-scene" style={{ backgroundImage: `url(${campoBatalha})` }}>
 
@@ -832,8 +817,8 @@ export default function App() {
                           const snap = enemyDmgPop
                           setEnemyDmgPop(null)
                           if (snap?.type === 'counter') resolveAnimation()
-                          if (typeof combatPhase === 'object' && combatPhase.type === 'hit' && combatPhase.targetId === e.id)
-                            setCombatPhase({ type: 'dying', targetId: e.id })
+                          if (typeof combatPhaseRef.current === 'object' && combatPhaseRef.current.type === 'hit' && combatPhaseRef.current.targetId === e.id)
+                            setCombatPhaseSync({ type: 'dying', targetId: e.id })
                         }}
                       />
                     )}
@@ -841,10 +826,11 @@ export default function App() {
                     <EnemySprite
                       anim={enemyAnims[e.id] ?? 'idle'}
                       type={e.type}
-                      dying={typeof combatPhase === 'object' && combatPhase.type === 'dying' && combatPhase.targetId === e.id}
+                      dying={typeof combatPhase === 'object' && combatPhase.type === 'dying' && combatPhase.targetId === e.id
+                      }
                       dead={isDead || dyingIds.includes(e.id)}
                       onDyingDone={() => {
-                        setCombatPhase('idle')
+                        setCombatPhaseSync('idle')
                         enemyDied(e.id)
                         if (afterDeathCbRef.current) {
                           const cb = afterDeathCbRef.current
@@ -872,18 +858,13 @@ export default function App() {
               </div>
             </div>
 
-            {heroDmgQueue.length > 0 && (
+            {heroDmgEvt && (
               <div className="hero-dmg-pos">
                 <DamagePopup
-                  key={heroDmgQueue[0] + '_' + heroDmgQueue.length}
-                  damage={heroDmgQueue[0] === 'dodge' || heroDmgQueue[0] === 'counter' ? 0 : heroDmgQueue[0]}
-                  type={heroDmgQueue[0] === 'dodge' ? 'dodge' : heroDmgQueue[0] === 'counter' ? 'counter' : 'hero'}
-                  onStart={() => {
-                    const t = heroDmgQueue[0]
-                    const type = t === 'dodge' ? 'dodge' : (t === 0 || t === 'counter') ? 'block' : 'hit'
-                    setHeroAnimEvt(prev => ({ type, token: prev.token + 1 }))
-                  }}
-                  onDone={onHeroDmgDone}
+                  key={heroDmgEvt.token}
+                  damage={0}
+                  type={heroDmgEvt.type}
+                  onDone={() => setHeroDmgEvt(null)}
                 />
               </div>
             )}

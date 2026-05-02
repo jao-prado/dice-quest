@@ -4,7 +4,7 @@ import { useRef, useCallback } from 'react'
 export function useCombatQueue() {
   const queue = useRef([])
   const running = useRef(false)
-  const resolveAnim = useRef(null)
+  const resolveAnim = useRef([])
   const resolvePopup = useRef(null)
 
   const processNext = useCallback(async () => {
@@ -30,11 +30,12 @@ export function useCombatQueue() {
   }, [processNext])
 
   const resolveAnimation = useCallback(() => {
-    if (resolveAnim.current) { resolveAnim.current(); resolveAnim.current = null }
+    const fn = resolveAnim.current.shift()
+    if (fn) fn()
   }, [])
 
   const waitForAnim = useCallback(() => {
-    return new Promise(resolve => { resolveAnim.current = resolve })
+    return new Promise(resolve => { resolveAnim.current.push(resolve) })
   }, [])
 
   const resolvePopupAnim = useCallback(() => {
@@ -48,7 +49,7 @@ export function useCombatQueue() {
   const clearQueue = useCallback(() => {
     queue.current = []
     running.current = false
-    resolveAnim.current = null
+    resolveAnim.current = []
     resolvePopup.current = null
   }, [])
 
