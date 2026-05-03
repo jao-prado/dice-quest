@@ -46,7 +46,8 @@ function getEnemyCount(phase) {
 
 /** Gera a lista de inimigos para uma fase */
 export function spawnEnemyWave(phase) {
-  if (phase % 10 === 0) return [buildEnemy(phase, 'boss', 0)]
+  const step = ((phase - 1) % 5) + 1
+  if (step === 5) return [buildEnemy(phase, 'boss', 0)]
   const count = getEnemyCount(phase)
   const chance = eliteChance(phase)
   return Array.from({ length: count }, (_, i) => {

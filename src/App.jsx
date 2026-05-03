@@ -9,7 +9,8 @@ import heroi_ataque1  from './assets/sprites/hero/heroi_comecando_atacar.png'
 import heroi_ataque2  from './assets/sprites/hero/heroi_ataque_finalizado.png'
 import monstro_parado from './assets/sprites/enemy/monstro_parado.png'
 import monstro_ataque from './assets/sprites/enemy/monstro_ataque_finalizado.png'
-import ItemStage from './ItemStage'
+import ChestOverlay from './ChestOverlay'
+import { LOOT_TABLE } from './ItemStage'
 import DiceRollAnimation from './DiceRollAnimation'
 import DamagePopup from './DamagePopup'
 import { Icon, IC } from './icons'
@@ -66,6 +67,10 @@ export default function App() {
   const [dyingIds,      setDyingIds]      = useState([])
   const [allEnemies,    setAllEnemies]    = useState([])
   const [combatOver,    setCombatOver]    = useState(false)
+  const [chestLoot,     setChestLoot]     = useState(null)
+  const [waitingForChest, setWaitingForChest] = useState(false)
+  const [currentPhase,  setCurrentPhase]  = useState(1)
+  const [screenCount,   setScreenCount]   = useState(0)
   const [titleBgmStarted, setTitleBgmStarted] = useState(false)
   const [showMusicPrompt, setShowMusicPrompt] = useState(true)
   const [fading,        setFading]        = useState(false)
@@ -80,22 +85,24 @@ export default function App() {
   const lastHoverTime = useRef(0)
   const enemiesRef = useRef([])
   const playerRef  = useRef(player)
+  const stageAdvancedRef = useRef(false)
   useEffect(() => { enemiesRef.current = enemies }, [enemies])
   useEffect(() => { playerRef.current  = player  }, [player])
 
-  const isBossPhase = player.phase % 10 === 0
+  // fase real começa em 1, ciclo de 5 para o indicador visual
+  const cycleStep = ((player.phase - 1) % 5) + 1
+  const isBossStep = cycleStep === 5
+  const isBossPhase = isBossStep
 
   useEffect(() => {
-    if (gameState === 'title') return
-    if (gameState === 'combat') {
-      if (isBossPhase) fadeToBgm('boss')
-    } else if (gameState === 'menu') {
-      fadeToBgm('overworld')
-    } else if (gameState === 'gameover') {
-      stopBgm()
-      playSfx('gameover')
+    if (combatOver && !waitingForChest) {
+      if (perkQueue.length > 0) {
+        fadeToState('levelup')
+      } else {
+        fadeToState('menu')
+      }
     }
-  }, [gameState, isBossPhase])
+  }, [combatOver, waitingForChest, perkQueue])
 
   const fadeToState = (state, delay = 0) => {
     setFading(true)
@@ -129,8 +136,7 @@ export default function App() {
     setTimeout(() => { setEnemyAnims(prev => ({ ...prev, [id]: 'idle' })); cb() }, 400)
   }
 
-  const isItemPhase = (phase) => phase % 3 === 0 && phase % 5 !== 0
-
+  // item drop acontece a cada 3 fases reais (futuro: será inline na fase)
   const { enqueueAll, resolveAnimation, waitForAnim } = useCombatQueue()
   const { spawnDmgPopup, removePopup, clearAll: clearDmgPopups, flushDamage } = useHeroDamagePopups(setDmgPopups, setTotalPopup)
 
@@ -139,7 +145,8 @@ export default function App() {
   }
 
   const startPhase = (p = player) => {
-    if (isItemPhase(p.phase)) { setGameState('item'); return }
+    setCurrentPhase(p.phase)
+    setChestLoot(null)
     const es = spawnEnemyWave(p.phase)
     setEnemies(es)
     setAllEnemies(es)
@@ -156,13 +163,22 @@ export default function App() {
     setCanCounterAttack(false)
     setSelectingTarget(false)
     setPendingRoll(null)
+    stageAdvancedRef.current = false
+    const cycleStep = ((p.phase - 1) % 5) + 1
+    fadeToBgm(cycleStep === 5 ? 'boss' : 'overworld')
     setGameState('combat')
   }
 
   const handleCollect = (loot) => {
     playSfx('item_collect')
-    setPlayer(p => ({ ...p, inventory: [...p.inventory, loot.id], phase: p.phase + 1 }))
-    setGameState('menu')
+    setChestLoot(null)
+    setWaitingForChest(false)
+    setPlayer(p => ({ ...p, inventory: [...p.inventory, loot.id] }))
+    if (perkQueue.length > 0) {
+      fadeToState('levelup')
+    } else {
+      fadeToState('menu')
+    }
   }
 
   const handleAttack = () => {
@@ -453,30 +469,40 @@ export default function App() {
         setCombatOver(true)
         // rolling permanece true, action bar travada até trocar de tela
         const xpGain = prev.reduce((s, e) => s + e.xp, 0)
-        setPlayer(p => {
-          let { xp, level, maxHp, hp, phase } = p
-          xp += xpGain
-          let levelsGained = 0
-          while (xp >= XP_TO_LEVEL(level)) {
-            xp -= XP_TO_LEVEL(level)
-            level++
-            maxHp += 3
-            hp = Math.min(hp + 3, maxHp)
-            levelsGained++
-          }
-          if (levelsGained > 0) {
-            playSfx('levelup', 0.3)
-            playSfx('levelup_complete', 0.3)
-            const choices = Array.from({ length: levelsGained }, () => pickPerks())
-            setPerkQueue(choices)
-            setPerkChoices(choices[0])
-            setPerkChosen(false)
-            setTimeout(() => fadeToState('levelup'), 100)
-          } else {
-            setTimeout(() => fadeToState('menu'), 100)
-          }
-          return { ...p, xp, level, maxHp, hp, phase: phase + 1 }
-        })
+        if (!stageAdvancedRef.current) {
+          stageAdvancedRef.current = true
+          setPlayer(p => {
+            let { xp, level, maxHp, hp, phase } = p
+            xp += xpGain
+            let levelsGained = 0
+            while (xp >= XP_TO_LEVEL(level)) {
+              xp -= XP_TO_LEVEL(level)
+              level++
+              maxHp += 3
+              hp = Math.min(hp + 3, maxHp)
+              levelsGained++
+            }
+            // Chance de 20% de spawnar baú
+            if (Math.random() < 0.2) {
+              const loot = LOOT_TABLE[Math.floor(Math.random() * LOOT_TABLE.length)]
+              setChestLoot(loot)
+              setWaitingForChest(true)
+            } else {
+              setWaitingForChest(false)
+            }
+            
+            if (levelsGained > 0) {
+              playSfx('levelup', 0.3)
+              playSfx('levelup_complete', 0.3)
+              const choices = Array.from({ length: levelsGained }, () => pickPerks())
+              setPerkQueue(choices)
+              setPerkChoices(choices[0])
+              setPerkChosen(false)
+            }
+            const newPhase = phase >= 5 ? 1 : phase + 1
+            return { ...p, xp, level, maxHp, hp, phase: newPhase }
+          })
+        }
         return []
       })
     }, 100)
@@ -511,11 +537,13 @@ export default function App() {
     setPlayer(INITIAL_PLAYER)
     setGameState('title')
     setDiceResult(null)
+    setScreenCount(0)
   }
 
   const hpPct   = (player.hp / player.maxHp) * 100
   const xpPct   = (player.xp / XP_TO_LEVEL(player.level)) * 100
   const potions = player.inventory.filter(i => i === 'pocao').length
+  const faseIdx = ((player.phase - 1) % 5) + 1
 
   return (
     <div className="game">
@@ -538,7 +566,7 @@ export default function App() {
             <img src={IC.ti_titulo} alt="Dice Quest" className="ti-logo" />
 
             <div className="ti-buttons">
-              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); setGameState('menu') }}>
+              <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click'); startPhase(INITIAL_PLAYER) }}>
                 <img src={IC.ti_comecar_jogo} alt="Começar Jogo" />
               </button>
               <button className="ti-btn" onClick={() => { startTitleBgm(); playSfx('click') }}>
@@ -593,7 +621,7 @@ export default function App() {
                 <div className="menu-info-row">
                   <span>LV. {player.level}</span>
                   <span>FASE {player.phase}</span>
-                  {player.phase % 10 === 0 && <span className="boss-warn">BOSS!</span>}
+                  {isBossStep && <span className="boss-warn">BOSS!</span>}
                 </div>
               </div>
             </div>
@@ -616,7 +644,7 @@ export default function App() {
               <div className="menu-inventory">
                 {Object.entries(player.inventory.reduce((a,i)=>{a[i]=(a[i]||0)+1;return a},{})).map(([id, qty]) => (
                   <span key={id} className="item-badge">
-                    <img src={IC.pocao} alt="" style={{width:14,height:14,imageRendering:'pixelated',verticalAlign:'middle'}} /> x{qty}
+                    <img src={IC.pocao} alt="" style={{width:10,height:10,imageRendering:'pixelated',verticalAlign:'middle'}} /> x{qty}
                   </span>
                 ))}
               </div>
@@ -624,7 +652,7 @@ export default function App() {
           </div>
 
           <button className="img-btn menu-btn" onClick={() => startPhase(player)}>
-            {player.phase % 10 === 0
+            {isBossStep
               ? <img src={IC.enfrentar_boss} alt="Enfrentar Boss" />
               : <img src={IC.proximo_enc}    alt="Proximo Encontro" />}
           </button>
@@ -638,7 +666,14 @@ export default function App() {
         <div className="combat-screen">
           <div className="combat-scene" style={{ backgroundImage: `url(${campoBatalha})` }}>
 
+            <img src={IC[`nivel_fase${faseIdx}`]} alt="fase" className="level-progress-indicator" />
+
             <div key={heroAnimEvt.token} className={`scene-hero${heroAnimEvt.type === 'hit' ? ' hero-hit' : heroAnimEvt.type === 'dodge' ? ' hero-dodge' : heroAnimEvt.type === 'block' ? ' hero-block' : ''}`} onAnimationEnd={() => resolveAnimation()}>
+              <div className="hero-bars">
+                <div className="hero-hp-name">HERO <span>Lv.{player.level}</span></div>
+                <div className="bar enemy-bar"><div className="bar-fill hp" style={{ width: `${hpPct}%` }} /></div>
+                <div className="bar hero-xp-track"><div className="bar-fill xp" style={{ width: `${xpPct}%` }} /></div>
+              </div>
               <HeroSprite anim={heroAnim} />
             </div>
 
@@ -702,18 +737,7 @@ export default function App() {
             </div>
 
 
-            <div className="player-hud">
-              <div className="hud-name">HERO <span>Lv.{player.level}</span></div>
-              <div className="hud-hp-row">
-                <span className="hp-label">HP</span>
-                <div className="bar hud-bar"><div className="bar-fill hp" style={{ width: `${hpPct}%` }} /></div>
-              </div>
-              <div className="hud-hp-num">{player.hp} / {player.maxHp}</div>
-              <div className="hud-hp-row">
-                <span className="hp-label exp">EXP</span>
-                <div className="bar hud-bar"><div className="bar-fill xp" style={{ width: `${xpPct}%` }} /></div>
-              </div>
-            </div>
+
 
             {heroDmgEvt && (
               <div className="hero-dmg-pos">
@@ -756,19 +780,23 @@ export default function App() {
               <DiceRollAnimation result={pendingDice.roll} onDone={onDiceAnimDone} />
             )}
 
-            <button className="img-btn" style={{ position: 'absolute', top: 12, right: 0, zIndex: 6, padding: 0, transform: 'translateY(-30%)' }} disabled={rolling} onClick={() => { playSfx('click'); setRolling(false); setShowDice(false); setPendingDice(null); setGameState('menu') }}>
-              <img src={IC.engrenagem} alt="Menu" style={{ height:200, imageRendering: 'auto' }} />
-            </button>
+            <img
+              src={IC.engrenagem}
+              alt="Menu"
+              className="combat-menu-btn"
+              style={{ opacity: rolling ? 0.35 : 1, cursor: rolling ? 'not-allowed' : 'pointer' }}
+              onClick={() => { if (rolling) return; playSfx('click'); setRolling(false); setShowDice(false); setPendingDice(null); setGameState('menu') }}
+            />
 
             <div className="action-bar">
-              <button className="img-btn" onClick={handleAttack} disabled={rolling || selectingTarget || combatOver}>
+              <button className="img-btn" onClick={handleAttack} disabled={rolling || selectingTarget || combatOver || waitingForChest}>
                 <img src={IC.peark_dano} alt="Attack" />
                 {canCounterAttack && <span className="counter-badge">ATACAR!</span>}
               </button>
-              <button className="img-btn" onClick={handleDefend} disabled={rolling || canCounterAttack || selectingTarget || combatOver}>
+              <button className="img-btn" onClick={handleDefend} disabled={rolling || canCounterAttack || selectingTarget || combatOver || waitingForChest}>
                 <img src={IC.peark_defesa} alt="Defend" />
               </button>
-              <button className="img-btn" onClick={() => setShowInventory(true)} disabled={rolling || canCounterAttack || selectingTarget || combatOver}>
+              <button className="img-btn" onClick={() => setShowInventory(true)} disabled={rolling || canCounterAttack || selectingTarget || combatOver || waitingForChest}>
                 <img src={IC.mochila} alt="Mochila" />
               </button>
             </div>
@@ -780,13 +808,12 @@ export default function App() {
                 onClose={() => setShowInventory(false)}
               />
             )}
+            {chestLoot && (
+              <ChestOverlay item={chestLoot} onCollect={() => handleCollect(chestLoot)} />
+            )}
+
           </div>
         </div>
-      )}
-
-      {/* ITEM STAGE */}
-      {gameState === 'item' && (
-        <ItemStage player={player} phase={player.phase} onCollect={handleCollect} />
       )}
 
       {/* LEVEL UP */}

@@ -31,6 +31,12 @@ import ti_config       from './assets/ui/title/config.png'
 import ti_conquista    from './assets/ui/title/conquista.png'
 import ti_estatistica  from './assets/ui/title/estatistica.png'
 
+import nivel_fase1 from './assets/ui/icons/nivel_fase1.png'
+import nivel_fase2 from './assets/ui/icons/nivel_fase2.png'
+import nivel_fase3 from './assets/ui/icons/nivel_fase3.png'
+import nivel_fase4 from './assets/ui/icons/nivel_fase4.png'
+import nivel_fase5 from './assets/ui/icons/nivel_fase5.png'
+
 export const IC = {
   caveira, coletar, comecar_jogo,
   enfrentar_boss, escudo, espada, estrela,
@@ -39,6 +45,7 @@ export const IC = {
   engrenagem, pocao, proximo_enc, reroll, titulo,
   ti_comecar_jogo, ti_tutorial, ti_menu, ti_feedback,
   ti_titulo, ti_dice, ti_config, ti_conquista, ti_estatistica,
+  nivel_fase1, nivel_fase2, nivel_fase3, nivel_fase4, nivel_fase5,
 }
 
 export function Icon({ name, size = 22, style = {} }) {

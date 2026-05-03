@@ -94,6 +94,12 @@
 
 .menu-logo { width: clamp(140px, 22vw, 260px); height: auto; image-rendering: pixelated; }
 
+.menu-fase-indicator {
+  height: clamp(50px, 9vh, 100px); width: auto;
+  image-rendering: pixelated;
+}
+
+
 .menu-card {
   background: #f5eed8;
   border: 4px solid #2c2c3a;
@@ -155,8 +161,16 @@
   position: absolute; z-index: 1;
   width: auto; height: 52vh;
   filter: drop-shadow(0 10px 6px rgba(0,0,0,0.5));
+  overflow: visible;
 }
 .scene-hero .hero-sprite { width: auto; height: 100%; object-fit: contain; object-position: bottom center; }
+
+.hero-bars {
+  position: absolute;
+  top: 32px; left: 45%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  white-space: nowrap; z-index: 3;
+}
 
 /* ══ ENEMIES CONTAINER ══ */
 .enemies-container {
@@ -278,14 +292,14 @@
 /* individual enemy HP bar */
 .enemy-hp-bar {
   position: absolute;
-  top: -48px; left: 50%; transform: translateX(-50%);
+  top: -48px; left: calc(50% + 20px); transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   white-space: nowrap; z-index: 3;
 }
 .enemy-hp-name {
-  font-size: clamp(0.3rem, 0.7vw, 0.42rem);
-  color: #f5eed8;
-  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000;
+  font-size: clamp(0.35rem, 0.8vw, 0.48rem);
+  color: #fff;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 2px 4px #000;
   display: flex; align-items: center; gap: 4px;
 }
 .enemy-type-badge {
@@ -295,7 +309,7 @@
 .enemy-type-badge.elite { color: #f5c842; border-color: #f5c842; }
 .enemy-type-badge.boss  { color: #e74c3c; border-color: #e74c3c; animation: blink 0.8s step-end infinite; }
 .bar.enemy-bar {
-  width: clamp(80px, 10vw, 130px); height: 13px;
+  width: clamp(80px, 10vw, 130px); height: 18px;
   border: 2px solid #2c2c3a; background: #5a3a3a;
 }
 
@@ -308,25 +322,48 @@
   pointer-events: none;
 }
 
-.player-hud { position: absolute; z-index: 1; }
-.player-hud {
-  bottom: calc(16vh + 14px); right: 12px;
-  background: #f5eed8; border: 3px solid #2c2c3a;
-  box-shadow: 4px 4px 0 rgba(0,0,0,0.55);
-  padding: 14px 20px; min-width: clamp(240px, 32vw, 360px); color: #2c2c3a;
-}
-.hud-name { font-size: clamp(0.6rem, 1.4vw, 0.85rem); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-.hud-name span { color: #8b6914; font-size: clamp(0.55rem, 1.2vw, 0.75rem); }
-.hud-hp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.hp-label { font-size: clamp(0.48rem, 1.1vw, 0.65rem); color: #e8a020; white-space: nowrap; min-width: 30px; }
-.hp-label.exp { color: #4a9eff; }
 .bar { height: 8px; background: #a09070; border: 2px solid #2c1810; overflow: hidden; }
 .bar-fill { height: 100%; transition: width 0.3s; }
 .bar-fill.hp       { background: #3cb043; }
 .bar-fill.xp       { background: #4a9eff; }
 .bar-fill.enemy-hp { background: #3cb043; transition: width 2s ease-out; }
-.bar.hud-bar { flex: 1; height: 14px; border: 2px solid #2c2c3a; background: #c0b090; }
-.hud-hp-num { font-size: clamp(0.48rem, 1.1vw, 0.65rem); text-align: right; margin-bottom: 8px; color: #2c2c3a; }
+
+.hero-hp-name {
+  font-size: clamp(0.35rem, 0.8vw, 0.48rem);
+  color: #fff;
+  text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 2px 4px #000;
+  display: flex; align-items: center; gap: 6px;
+}
+.hero-hp-name span { color: #f5c842; }
+.bar.hero-xp-track {
+  width: clamp(80px, 10vw, 130px); height: 7px;
+  border: 2px solid #2c2c3a; background: #1a2a4a;
+}
+
+
+.img-btn.combat-menu-btn {
+  position: absolute; top: 12px; right: 8px; z-index: 6;
+  display: inline-block;
+  width: 80px; height: 80px;
+  overflow: hidden;
+}
+.img-btn.combat-menu-btn img { height: 80px; width: 80px; object-fit: contain; image-rendering: auto; display: block; }
+
+.combat-menu-btn {
+  position: absolute; top: -25px; right: -18px; z-index: 6;
+  height: 220px; width: auto;
+  image-rendering: auto; display: block;
+  transition: transform 0.08s, filter 0.08s;
+}
+.combat-menu-btn:hover { transform: scale(1.07); filter: brightness(1.12); }
+.combat-menu-btn:active { transform: scale(0.94); }
+
+.level-progress-indicator {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  height: clamp(40px, 7vh, 80px); width: auto;
+  image-rendering: pixelated; z-index: 6;
+  pointer-events: none;
+}
 
 /* action bar */
 .action-bar {
@@ -434,6 +471,29 @@
 .inv-item-name { font-family: 'Press Start 2P', monospace; font-size: clamp(0.35rem, 0.85vw, 0.5rem); color: #2c2c3a; flex: 1; text-align: left; }
 .inv-item-qty  { font-family: 'Press Start 2P', monospace; font-size: clamp(0.4rem, 0.9vw, 0.55rem); color: #8b6914; }
 
+/* ══ CHEST OVERLAY ══ */
+.chest-overlay {
+  position: absolute; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.45);
+  animation: fade-in 0.5s ease-out;
+}
+.chest-overlay-content {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: #f5eed8; border: 4px solid #2c2c3a;
+  box-shadow: 0 0 0 2px #8b6914, 6px 6px 0 #2c2c3a;
+  padding: 28px 40px;
+  animation: dice-land 0.3s ease-out;
+}
+.chest-found-msg {
+  font-size: clamp(0.5rem, 1.2vw, 0.7rem); color: #8b6914; letter-spacing: 2px;
+}
+.chest-overlay-bau img { height: clamp(80px, 14vh, 140px); width: auto; image-rendering: pixelated; }
+.chest-item-info {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  animation: fade-in 0.3s ease-out;
+}
+
 /* ══ ITEM STAGE ══ */
 .scene-chest {
   position: absolute;
@@ -441,7 +501,7 @@
   z-index: 1;
   display: flex; align-items: flex-end;
 }
-.chest-sprite { height: 30vh; width: auto; image-rendering: pixelated; }
+.chest-sprite { height: 35vh; width: auto; image-rendering: pixelated; }
 .chest-sprite.chest-open { animation: chest-pop 0.35s ease-out; }
 @keyframes chest-pop { 0%{transform:scale(1)} 50%{transform:scale(1.08)} 100%{transform:scale(1)} }
 .chest-msg { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); background: rgba(240,234,208,0.92); border: 3px solid #2c2c3a; box-shadow: 3px 3px 0 rgba(0,0,0,0.4); padding: 10px 20px; font-size: clamp(0.4rem, 1vw, 0.6rem); color: #2c2c3a; white-space: nowrap; z-index: 2; }

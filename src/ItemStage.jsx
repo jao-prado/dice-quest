@@ -12,6 +12,8 @@ import pocao_cura   from './assets/sprites/items/pocao_cura.png'
 import pocao_defesa from './assets/sprites/items/pocao_defesa.png'
 import pocao_forca  from './assets/sprites/items/pocao_forca.png'
 
+import { IC } from './icons'
+
 export const LOOT_TABLE = [
   { id: 'poção',        name: 'POÇÃO DE VIDA',   desc: 'Restaura 5 HP',          sprite: pocao_vida   },
   { id: 'poção cura',   name: 'POÇÃO DE CURA',   desc: 'Restaura 10 HP',         sprite: pocao_cura   },
@@ -49,8 +51,14 @@ export default function ItemStage({ player, phase, onCollect }) {
     <div className="combat-screen">
       <div className="combat-scene" style={{ backgroundImage: `url(${cenario})` }}>
 
+        <img src={IC[`nivel_fase${((phase - 1) % 5) + 1}`]} alt="fase" className="level-progress-indicator" />
+
         {/* herói */}
         <div className="scene-hero">
+          <div className="hero-bars">
+            <div className="hero-hp-name">HERO <span>Lv.{player.level}</span></div>
+            <div className="bar enemy-bar"><div className="bar-fill hp" style={{ width: `${hpPct}%` }} /></div>
+          </div>
           <img src={heroi_parado} alt="hero" className="sprite hero-sprite" />
         </div>
 
@@ -61,18 +69,6 @@ export default function ItemStage({ player, phase, onCollect }) {
             alt="chest"
             className={`sprite chest-sprite${frame === 'open' ? ' chest-open' : ''}`}
           />
-        </div>
-
-        {/* HUD herói */}
-        <div className="player-hud">
-          <div className="hud-name">HERO <span>Lv.{player.level}</span></div>
-          <div className="hud-hp-row">
-            <span className="hp-label">HP</span>
-            <div className="bar hud-bar">
-              <div className="bar-fill hp" style={{ width: `${hpPct}%` }} />
-            </div>
-          </div>
-          <div className="hud-hp-num">{player.hp} / {player.maxHp}</div>
         </div>
 
         {/* popup do item — igual ao dado */}
