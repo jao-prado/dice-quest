@@ -10,6 +10,7 @@ import heroi_ataque2  from './assets/sprites/hero/heroi_ataque_finalizado.png'
 import monstro_parado from './assets/sprites/enemy/monstro_parado.png'
 import monstro_ataque from './assets/sprites/enemy/monstro_ataque_finalizado.png'
 import ChestOverlay from './ChestOverlay'
+import CombatScene from './CombatScene'
 import { LOOT_TABLE } from './ItemStage'
 import DiceRollAnimation from './DiceRollAnimation'
 import DamagePopup from './DamagePopup'
@@ -499,8 +500,7 @@ export default function App() {
               setPerkChoices(choices[0])
               setPerkChosen(false)
             }
-            const newPhase = phase >= 5 ? 1 : phase + 1
-            return { ...p, xp, level, maxHp, hp, phase: newPhase }
+            return { ...p, xp, level, maxHp, hp, phase: phase + 1 }
           })
         }
         return []
@@ -664,7 +664,7 @@ export default function App() {
       {/* COMBAT */}
       {gameState === 'combat' && (
         <div className="combat-screen">
-          <div className="combat-scene" style={{ backgroundImage: `url(${campoBatalha})` }}>
+          <CombatScene bgSrc={campoBatalha} isBoss={isBossPhase}>
 
             <img src={IC[`nivel_fase${faseIdx}`]} alt="fase" className="level-progress-indicator" />
 
@@ -812,7 +812,7 @@ export default function App() {
               <ChestOverlay item={chestLoot} onCollect={() => handleCollect(chestLoot)} />
             )}
 
-          </div>
+          </CombatScene>
         </div>
       )}
 
