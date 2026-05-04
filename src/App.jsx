@@ -16,6 +16,7 @@ import DiceRollAnimation from './DiceRollAnimation'
 import DamagePopup from './DamagePopup'
 import { Icon, IC } from './icons'
 import InventoryMenu, { ITEM_DATA } from './InventoryMenu'
+import StageTrail from './StageTrail'
 import { useCombatQueue } from './useCombatQueue'
 import { useHeroDamagePopups } from './useHeroDamagePopups'
 import { INITIAL_PLAYER, HP_PER_LEVEL, DEF_PER_LEVEL, DMG_PER_LEVEL, LUCK_PER_LEVEL, AGIL_PER_LEVEL, XP_TO_LEVEL, DEFEND_FAIL_MULT } from './game/constants'
@@ -75,6 +76,7 @@ export default function App() {
   const [titleBgmStarted, setTitleBgmStarted] = useState(false)
   const [showMusicPrompt, setShowMusicPrompt] = useState(true)
   const [fading,        setFading]        = useState(false)
+  const [trailPlayer,   setTrailPlayer]   = useState(null)
   // combatPhase: 'idle' | 'hit' | 'dying' | 'deathAnim' | 'dead'
   const [combatPhase, setCombatPhase] = useState('idle')
   const combatPhaseRef = useRef('idle')
@@ -97,17 +99,14 @@ export default function App() {
 
   useEffect(() => {
     if (combatOver && !waitingForChest) {
-      if (perkQueue.length > 0) {
-        fadeToState('levelup')
-      } else {
-        fadeToState('menu')
-      }
+      setTrailPlayer({ ...playerRef.current })
+      setTimeout(() => setGameState('trail'), 600)
     }
-  }, [combatOver, waitingForChest, perkQueue])
+  }, [combatOver, waitingForChest])
 
   const fadeToState = (state, delay = 0) => {
     setFading(true)
-    setTimeout(() => { setGameState(state); setFading(false) }, 200 + delay)
+    setTimeout(() => { setGameState(state); setTimeout(() => setFading(false), 200) }, 300 + delay)
   }
 
   const startTitleBgm = () => {
@@ -848,6 +847,25 @@ export default function App() {
           <AudioSettings />
         </div>
       )}
+      {/* TRAIL */}
+      {gameState === 'trail' && trailPlayer && (
+        <StageTrail
+          player={trailPlayer}
+          onNext={() => {
+            playSfx('click')
+            if (perkQueue.length > 0) fadeToState('levelup')
+            else { setFading(true); setTimeout(() => { startPhase(playerRef.current); setTimeout(() => setFading(false), 200) }, 300) }
+          }}
+          onSaveQuit={() => {
+            playSfx('click')
+            // salva no localStorage e volta ao título
+            try { localStorage.setItem('dicequest_save', JSON.stringify(player)) } catch {}
+            setGameState('title')
+            fadeToBgm('title')
+          }}
+        />
+      )}
+
       {fading && <div className="screen-fade" />}
     </div>
   )

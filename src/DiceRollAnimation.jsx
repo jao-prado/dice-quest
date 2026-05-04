@@ -34,7 +34,6 @@ export default function DiceRollAnimation({ result, onDone }) {
   const [phase,     setPhase]     = useState('rolling') // rolling | number | label | done
 
   useEffect(() => {
-    // loop de frames
     const spin = setInterval(() => {
       setFrameIdx(i => (i + 1) % 3)
     }, 100)
@@ -55,14 +54,12 @@ export default function DiceRollAnimation({ result, onDone }) {
     <div className="dice-overlay">
       <div className="dice-modal-sprite">
 
-        {/* frame do dado */}
         <img
           src={FRAMES[frameIdx]}
           alt="dado"
           className={`dice-frame-img${phase !== 'rolling' ? ' dice-landed' : ''}`}
         />
 
-        {/* número — aparece após parar */}
         {(phase === 'number' || phase === 'label') && (
           <img
             src={NUMS[result]}
@@ -71,7 +68,6 @@ export default function DiceRollAnimation({ result, onDone }) {
           />
         )}
 
-        {/* texto resultado */}
         {phase === 'label' && (
           <img
             src={LABEL_IMG[result]}
