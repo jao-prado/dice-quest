@@ -4,6 +4,7 @@ import { unlockAudio, playSfx, playHover, fadeToBgm, stopBgm } from './audio/Aud
 import AudioSettings from './AudioSettings'
 import campoBatalha from './assets/backgrounds/cenario.png'
 import bgTituloImg  from './assets/backgrounds/background_titulo.png'
+import bgMenuImg    from './assets/backgrounds/background_menu.png'
 import heroi_parado   from './assets/sprites/hero/heroi_parado.png'
 import heroi_ataque1  from './assets/sprites/hero/heroi_comecando_atacar.png'
 import heroi_ataque2  from './assets/sprites/hero/heroi_ataque_finalizado.png'
@@ -601,6 +602,7 @@ export default function App() {
       {/* MENU */}
       {gameState === 'menu' && (
         <div className="fullscreen-panel menu-screen">
+          <img src={bgMenuImg} alt="" className="menu-bg-img" />
           <img src={IC.titulo} alt="Dice Quest" className="menu-logo" />
 
           <div className="menu-card">

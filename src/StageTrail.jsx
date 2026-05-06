@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import heroi_parado from './assets/sprites/hero/heroi_parado.png'
-import campoBatalha from './assets/backgrounds/cenario.png'
+import bgMenuImg from './assets/backgrounds/background_menu.png'
 import { IC, Icon } from './icons'
 import { PERKS } from './game/perkSystem'
 import { XP_TO_LEVEL } from './game/constants'
@@ -48,7 +48,7 @@ export default function StageTrail({ player, onNext, onSaveQuit }) {
   const isBoss = cycleStep === 5
 
   return (
-    <div className="trail-screen" style={{ backgroundImage: `url(${campoBatalha})` }}>
+    <div className="trail-screen" style={{ backgroundImage: `url(${bgMenuImg})` }}>
       <div className="trail-overlay" />
 
       <div className="trail-layout">

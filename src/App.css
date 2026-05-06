@@ -93,9 +93,18 @@
 
 /* ══ MENU ══ */
 .menu-screen {
-  background: radial-gradient(ellipse at 50% 0%, #2a1a0e 0%, #0e0a06 100%);
+  position: relative;
   gap: 16px;
 }
+
+.menu-bg-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center;
+  z-index: 0;
+}
+
+.menu-screen > *:not(.menu-bg-img) { position: relative; z-index: 1; }
 
 .menu-logo { width: clamp(140px, 22vw, 260px); height: auto; image-rendering: pixelated; }
 
@@ -637,7 +646,7 @@
 }
 .trail-overlay {
   position: absolute; inset: 0;
-  background: rgba(5, 3, 1, 0.82);
+  background: rgba(5, 3, 1, 0.55);
   pointer-events: none;
 }
 
@@ -645,10 +654,10 @@
 .trail-layout {
   position: relative; z-index: 2;
   display: flex; flex-direction: row;
-  width: 100%; max-width: 1000px;
-  gap: 32px; padding: 24px 28px;
+  width: 100%;
+  gap: 32px; padding: 24px clamp(16px, 3vw, 40px);
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
 }
 
 /* ── MAPA ── */
@@ -789,22 +798,26 @@
 }
 
 .trail-phase-info {
-  font-size: clamp(0.35rem, 0.9vw, 0.5rem);
-  color: #8b6914; letter-spacing: 2px;
+  font-size: clamp(0.5rem, 1.2vw, 0.7rem);
+  color: #f5c842;
+  text-shadow: 0 0 12px #f5c842, 2px 2px 0 #2c1810;
+  letter-spacing: 3px;
+  white-space: nowrap;
   animation: fade-in 0.5s ease-out 0.6s both;
 }
 
 /* ── PAINEL LATERAL ── */
 .trail-side-panel {
-  width: clamp(210px, 26vw, 300px);
-  display: flex; flex-direction: column; gap: 12px;
-  background: rgba(10, 7, 3, 0.92);
+  width: clamp(280px, 32vw, 400px);
+  display: flex; flex-direction: column; gap: 16px;
+  background: rgba(10, 7, 3, 0.78);
   border: 3px solid #5a4020;
   box-shadow: inset 0 0 24px rgba(0,0,0,0.6), 4px 4px 0 #2c1810;
-  padding: 16px 14px;
+  padding: 24px 22px;
   opacity: 0; transform: translateX(28px);
   transition: opacity 0.45s ease-out, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
   align-self: center;
+  flex-shrink: 0;
 }
 .trail-side-panel--visible {
   opacity: 1; transform: translateX(0);
@@ -816,13 +829,13 @@
   border-bottom: 2px solid #3a2a10; padding-bottom: 10px;
 }
 .trail-profile-sprite {
-  height: clamp(44px, 7vh, 60px); width: auto;
+  height: clamp(60px, 9vh, 80px); width: auto;
   image-rendering: pixelated;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
 }
-.trail-profile-info { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.trail-profile-name { font-size: 0.42rem; color: #f5c842; letter-spacing: 1px; }
-.trail-profile-lv   { font-size: 0.36rem; color: #c0b090; }
+.trail-profile-info { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.trail-profile-name { font-size: 0.6rem; color: #f5c842; letter-spacing: 1px; }
+.trail-profile-lv   { font-size: 0.52rem; color: #c0b090; }
 .trail-stats-toggle {
   background: #2c1810; border: 2px solid #5a4020;
   color: #f5c842; font-family: 'Press Start 2P', monospace;
@@ -834,10 +847,10 @@
 /* barras */
 .trail-bars { display: flex; flex-direction: column; gap: 6px; }
 .trail-bar-row { display: flex; align-items: center; gap: 6px; }
-.trail-bar-label { font-size: 0.32rem; color: #e8a020; min-width: 18px; }
-.trail-bar-val   { font-size: 0.28rem; color: #c0b090; min-width: 52px; text-align: right; white-space: nowrap; }
+.trail-bar-label { font-size: 0.45rem; color: #e8a020; min-width: 22px; }
+.trail-bar-val   { font-size: 0.42rem; color: #c0b090; min-width: 64px; text-align: right; white-space: nowrap; }
 .trail-bar-track {
-  flex: 1; height: 8px;
+  flex: 1; height: 12px;
   background: #1a1008; border: 2px solid #3a2a10; overflow: hidden;
 }
 .trail-bar-fill { height: 100%; transition: width 0.6s ease-out; }
@@ -852,13 +865,13 @@
   max-height: 38vh; overflow-y: auto;
 }
 .trail-stats-title {
-  font-size: 0.3rem; color: #f5c842; letter-spacing: 2px;
+  font-size: 0.42rem; color: #f5c842; letter-spacing: 2px;
   margin-bottom: 2px;
 }
 .trail-stat-row {
   display: flex; justify-content: space-between; align-items: center;
-  font-size: 0.28rem; color: #c0b090;
-  padding: 2px 0;
+  font-size: 0.4rem; color: #c0b090;
+  padding: 3px 0;
   border-bottom: 1px solid rgba(90,64,32,0.3);
 }
 .trail-perk-lv { color: #f5c842; }
